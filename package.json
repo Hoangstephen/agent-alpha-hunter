@@ -1,0 +1,21 @@
+{
+  "name": "agent-alpha-hunter",
+  "version": "0.1.0",
+  "description": "Bot săn & mint NFT alpha trên BNB Chain qua Binance Agentic Wallet (baw CLI)",
+  "main": "src/index.js",
+  "scripts": {
+    "scan": "node src/index.js scan",
+    "watch": "node src/index.js watch",
+    "test": "node --test test/*.test.js",
+    "start": "node src/server.js"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "ethers": "^6.13.4"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "author": "x : @HoangFUDSCAM"
+}

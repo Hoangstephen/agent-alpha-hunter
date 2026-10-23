@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Alpha Hunter: Hướng dẫn sử dụng</title>
+<style>
+  :root { --bg:#f6f6f4; --card:#fff; --text:#1b1b1b; --muted:#6b6b6b; --line:#e3e3e0; --accent:#b38300; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111214; --card:#1b1c1f; --text:#ececec; --muted:#9a9a9a; --line:#2c2d31; --accent:#f0b90b; } }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:860px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:28px; margin:0 0 4px; } h2 { font-size:21px; margin:32px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  a { color:var(--accent); } code { background:var(--card); border:1px solid var(--line); border-radius:4px; padding:1px 5px; font-size:14px; word-break:break-all; }
+  table { width:100%; border-collapse:collapse; background:var(--card); font-size:15px; } th,td { border:1px solid var(--line); padding:8px; text-align:left; vertical-align:top; }
+  .muted { color:var(--muted); } .box { border:2px solid var(--accent); border-radius:12px; padding:16px; text-align:center; background:var(--card); }
+  .big { font-size:22px; font-weight:700; color:var(--accent); } .nfa { font-size:18px; font-weight:700; margin-top:10px; }
+  @media (max-width:600px) { table { font-size:13px; } }
+</style>
+</head>
+<body><main>
+<h1>Agent Alpha Hunter: Hướng dẫn sử dụng</h1>
+<div class="muted">Cập nhật 24/10/2026 · tác giả <a href="https://x.com/HoangFUDSCAM">x : @HoangFUDSCAM</a> · <a href="GUIDE-EN.html">English</a> · <a href="GUIDE-ZH.html">中文</a></div>
+
+<h2>Bot làm gì</h2>
+<p>Agent Alpha Hunter là bot chạy trên máy bạn để tìm và mint NFT "alpha" trên BNB Chain. Mọi giao dịch đều đi qua Binance Agentic Wallet. Bot không bao giờ hỏi seed phrase hay private key.</p>
+<ul>
+  <li><b>Tìm NFT đang hot:</b> quét các NFT đang được mint nhiều trên chain, tính bao nhiêu % người mint có Agent ID (.ai), lấy thêm tín hiệu từ X và gang.fun.</li>
+  <li><b>Hiện đủ thông tin trước khi mint:</b> giá trên hợp đồng, giá người khác đang trả, giá đang bán được, lãi ước tính, số đã mint, giới hạn mỗi ví, điểm an toàn 0–100.</li>
+  <li><b>Luật dự án bằng tiếng Việt cho từng NFT:</b> lấy từ hợp đồng và trang web dự án.</li>
+  <li><b>Link X của dự án</b> và nút tìm dự án trên X.</li>
+  <li><b>Mint 1 nút bấm:</b> chọn số lượng, bấm Mint, xác nhận. Có nút chờ mở mint, đến giờ bot báo để bạn xác nhận.</li>
+  <li><b>Bán và dọn ví:</b> tìm giá bán cao nhất cho NFT đang giữ, xem và thu hồi (revoke) quyền token đã cấp.</li>
+  <li>Quy đổi BNB ≈ USDT và hiện số dư ví.</li>
+  <li><b>🔥 Hot</b> (0–100) là mức độ được quan tâm (số ví mint, tỉ lệ ví Agent ID, nhắc trên X), không phải điểm an toàn. <b>💎 Gem</b> là dự án dành cho ví Agent ID, mint chậm nên ít người biết.</li>
+  <li><b>Cảnh báo hàng nhái:</b> 2 hợp đồng trùng tên thì cái ít người mint hơn bị gắn cảnh báo đỏ.</li>
+  <li><b>Tự học cách mint:</b> hợp đồng có hàm mint lạ thì bot chép cách mint từ giao dịch thành công của người khác (thay ví và Agent ID bằng của bạn), vẫn phải bạn xác nhận.</li>
+  <li><b>Giao diện 3 ngôn ngữ:</b> nút VI / EN / 中文 ở góc trên.</li>
+</ul>
+
+<h2>Chuẩn bị</h2>
+<ol>
+  <li><b>Node.js bản 20 trở lên:</b> tải bản LTS tại <a href="https://nodejs.org">nodejs.org</a> và cài như phần mềm bình thường.</li>
+  <li><b>Binance Agentic Wallet:</b> bật trong app Binance, nạp một ít BNB để trả phí gas và giá mint. Trong app, bật <b>Developer Mode</b> cho Agentic Wallet; thiếu bước này thì bot không gửi được lệnh mint.</li>
+  <li><b>Agent ID (.ai):</b> nhiều dự án chỉ cho ví có Agent ID mint (ví dụ Xuanwu Sigil). Bot sẽ báo nếu ví bạn chưa có.</li>
+  <li><b>Nên làm:</b> đặt <b>Daily Limit</b> thấp cho Agentic Wallet trong app Binance. Đây là lớp chặn phía Binance, không phụ thuộc vào bot.</li>
+</ol>
+
+<h2>Cài và chạy bot</h2>
+<ol>
+  <li>Giải nén file <b>nft-alpha-bot.zip</b> vào một thư mục, ví dụ <code>C:\nft-alpha-bot</code>.</li>
+  <li>Chạy bot: <b>Windows</b> bấm đúp vào <b>start.bat</b>; <b>Mac</b> bấm đúp vào <b>start.command</b> (nếu Mac chặn, chuột phải vào file, chọn Open).</li>
+  <li>Lần đầu, bot tự cài thư viện và công cụ ví <code>baw</code> của Binance, mất khoảng 1–2 phút.</li>
+  <li>Trình duyệt tự mở trang <b>http://127.0.0.1:3777</b>. Nếu không tự mở, bạn mở tay địa chỉ này.</li>
+  <li>Giữ cửa sổ đen (cửa sổ lệnh) mở trong lúc dùng. Đóng nó là tắt bot.</li>
+</ol>
+<p>Khi có bản mới: giải nén đè lên thư mục cũ. Thư mục <code>data</code> (sổ chi tiêu, RPC riêng, NFT đã tìm) được giữ nguyên.</p>
+
+<h2>Đăng nhập ví và cài RPC riêng</h2>
+<p><b>Đăng nhập ví:</b> bấm <b>Đăng nhập ví</b> ở đầu trang. Bot hiện link và mã ghép nối; bạn mở link, kiểm tra mã trùng khớp rồi xác nhận trong app Binance. Xong thì ô ví chuyển xanh và hiện số dư. Nếu bot báo chưa có <code>baw</code>, bấm <b>Cài baw</b> trước.</p>
+<p><b>RPC riêng (nên làm):</b> RPC công khai miễn phí hay quá tải, khiến bot quét chậm hoặc không thấy NFT. RPC riêng miễn phí tạo trong 2 phút:</p>
+<ol>
+  <li>Vào <a href="https://nodereal.io/invite/8404ae7b-f5ed-4d38-acf7-1e03e9711676">NodeReal</a>, đăng ký bằng Google hoặc GitHub.</li>
+  <li>Bấm <b>Create API Key</b>, đặt tên bất kỳ. Bước hỏi Discord thì bấm <b>Skip</b>.</li>
+  <li>Mở key vừa tạo, bấm <b>BSC RPC → Endpoint</b>, copy link <b>Mainnet HTTPS</b> dạng <code>https://bsc-mainnet.nodereal.io/v1/...</code>.</li>
+  <li>Trong bot, mở <b>⚙ RPC riêng</b>, dán link, bấm <b>Kiểm tra &amp; lưu</b>. Ô RPC ở đầu trang hiện chữ "(riêng)" là xong.</li>
+</ol>
+<p>RPC chỉ dùng để đọc dữ liệu chain, không chạm được vào ví. Link có chứa API key: không chia sẻ link và không chụp màn hình có key.</p>
+
+<h2>Dùng hằng ngày</h2>
+<table>
+  <tr><th>Việc cần làm</th><th>Bấm vào đâu</th><th>Ghi chú</th></tr>
+  <tr><td>Xem NFT đang hot</td><td>Mục <b>NFT đang hot</b></td><td>Bot tự quét 5 phút một lần; bấm <b>🔄 Tìm lại</b> (có đồng hồ đếm) hoặc <b>Quét lại</b> để quét ngay</td></tr>
+  <tr><td>Kiểm tra NFT thấy trên X</td><td>Dán địa chỉ hợp đồng <code>0x...</code> vào ô trên cùng, bấm <b>Kiểm tra</b></td><td>Hiện thẻ NFT đầy đủ giá, giới hạn, điểm an toàn</td></tr>
+  <tr><td>Đọc luật dự án</td><td>Mục <b>📜 Luật dự án</b> trên mỗi thẻ</td><td>Số liệu hợp đồng đáng tin hơn phần dịch từ trang dự án</td></tr>
+  <tr><td>Xem dự án trên X</td><td>Dòng link dưới địa chỉ hợp đồng</td><td>Link X của dự án (nếu tìm thấy), tìm theo địa chỉ hợp đồng, tìm theo tên</td></tr>
+  <tr><td>Mint</td><td>Chọn số lượng (1, 5, 10, Max) → <b>Mint N</b> → xem tóm tắt → <b>Xác nhận</b></td><td>Bot chờ xác nhận trên chain rồi mới báo thành công</td></tr>
+  <tr><td>Mint ngay khi mở</td><td><b>⏰ Chờ mở mint rồi báo tôi xác nhận</b></td><td>Giữ tab mở; đến giờ bot kêu và hiện hộp xác nhận</td></tr>
+  <tr><td>Tìm giá bán cao nhất</td><td>Mục <b>Bán NFT đang giữ</b> → <b>Tìm giá bán cao nhất</b></td><td>Lần đầu mất tới 1 phút; nếu báo "chưa hết" thì bấm lại</td></tr>
+  <tr><td>Mint bằng hàm lạ</td><td><b>🛠 Mint nâng cao</b> (dưới ô Kiểm tra) → nhập hợp đồng, hàm, tham số, số BNB → <b>Xem trước &amp; mint</b></td><td>Chỉ dùng khi bot không tự nhận ra hàm mint. Vẫn qua mô phỏng, giới hạn chi tiêu và bước Xác nhận</td></tr>
+  <tr><td>Thu hồi quyền token</td><td>Mục <b>Quyền token đã cấp</b> → <b>Xem quyền đã cấp</b> → <b>Revoke</b></td><td>Ưu tiên thu hồi quyền "vô hạn" hoặc bị đánh dấu rủi ro</td></tr>
+</table>
+<p>Hợp đồng có hàm <code>mint()</code> mỗi lần ra 1 NFT (như Xuanwu Sigil): chọn 3 thì bot gửi 3 giao dịch lần lượt, mỗi giao dịch bạn xác nhận riêng. Giá từng lần được dò tự động, vì lần đầu có thể miễn phí.</p>
+<p>Bot không tự đăng bán NFT. Đăng bán cần cấp quyền <code>setApprovalForAll</code> cho sàn, nên hãy làm trên trang chính thức của sàn (ví dụ Element).</p>
+
+<h2>An toàn và giới hạn</h2>
+<ul>
+  <li>Không hỏi, không lưu seed phrase hay private key. Ví do Binance ký.</li>
+  <li>Không bao giờ tự mint: mỗi lần mint bạn phải bấm Xác nhận.</li>
+  <li>Trần chi tiêu: tối đa 0.05 BNB mỗi lần mint và 0.2 BNB mỗi ngày (sửa trong <code>config.json</code> nếu cần).</li>
+  <li>Chặn các lệnh mà drainer hay dùng: <code>setApprovalForAll</code>, <code>transfer</code>, <code>permit</code>, approve không đúng số tiền. Chặn luôn nếu mô phỏng của Binance thấy giao dịch cấp quyền cho bên khác.</li>
+  <li>Điểm an toàn dưới 60: phải tích "Tôi đã tự kiểm tra hợp đồng" mới mint được. Dưới 40: luôn chặn.</li>
+  <li>Giao diện chỉ chạy trên máy bạn (127.0.0.1), trang web khác không gọi vào được.</li>
+</ul>
+<p>Cần biết: điểm an toàn là bộ lọc thô, không phải chứng nhận. Luật dịch từ trang dự án là dịch máy và do dự án tự viết. Không dán seed phrase vào bất kỳ đâu, kể cả "hỗ trợ viên" hay AI.</p>
+
+<h2>Lỗi thường gặp</h2>
+<table>
+  <tr><th>Bot báo</th><th>Cách xử lý</th></tr>
+  <tr><td><code>spawnSync baw ENOENT</code> hoặc "Chưa cài baw"</td><td>Bấm <b>Cài baw</b> trên giao diện, chờ xong rồi đăng nhập lại</td></tr>
+  <tr><td>"RPC không trả log", quét lâu, không thấy NFT nào</td><td>Cài RPC riêng (mục Đăng nhập ví và cài RPC riêng)</td></tr>
+  <tr><td>Không thấy NFT vừa mint trong ví</td><td>Dán địa chỉ hợp đồng NFT vào ô "Thêm địa chỉ NFT" rồi bấm lại <b>Tìm giá bán cao nhất</b></td></tr>
+  <tr><td>"Ví của bạn chưa có Agent ID"</td><td>Dự án chỉ cho ví có Agent ID (.ai) mint; cần đăng ký Agent ID trước</td></tr>
+  <tr><td>"Điểm an toàn ... dưới ngưỡng"</td><td>Tự xem hợp đồng trên BscScan; nếu điểm từ 40 trở lên có thể tích ô tự kiểm tra</td></tr>
+  <tr><td>"Vượt trần ngày"</td><td>Đã chi đủ 0.2 BNB hôm nay; chờ ngày mai hoặc nâng <code>maxDailyBNB</code> trong <code>config.json</code></td></tr>
+  <tr><td>"Hợp đồng từ chối lệnh mint"</td><td>Mint chưa mở, đã hết lượt mỗi ví, hoặc thiếu điều kiện trong mục Luật dự án</td></tr>
+</table>
+<p>Vẫn lỗi: chụp màn hình mục <b>Nhật ký</b> ở cuối trang và gửi cho <a href="https://x.com/HoangFUDSCAM">@HoangFUDSCAM</a> trên X. Che API key và địa chỉ ví nếu không muốn lộ.</p>
+
+<h2>Ủng hộ tác giả</h2>
+<div class="box">
+  <div class="big">Nếu các bạn thấy BOT hay, hãy donate cho mình vài cốc trà đá để mình có thêm động lực làm thêm các bot! ☕</div>
+  <p>BNB (BSC): <code>0xe85613938f85e8d791b8427a6b57d8fa864f1e97</code><br>ETH: <code>0xe85613938f85e8d791b8427a6b57d8fa864f1e97</code></p>
+  <div class="nfa">NFA · DYOR: không phải lời khuyên tài chính, hãy tự tìm hiểu trước khi mint.</div>
+</div>
+</main></body></html>

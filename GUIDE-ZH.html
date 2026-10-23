@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Alpha Hunter：使用指南</title>
+<style>
+  :root { --bg:#f6f6f4; --card:#fff; --text:#1b1b1b; --muted:#6b6b6b; --line:#e3e3e0; --accent:#b38300; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111214; --card:#1b1c1f; --text:#ececec; --muted:#9a9a9a; --line:#2c2d31; --accent:#f0b90b; } }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:860px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:28px; margin:0 0 4px; } h2 { font-size:21px; margin:32px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  a { color:var(--accent); } code { background:var(--card); border:1px solid var(--line); border-radius:4px; padding:1px 5px; font-size:14px; word-break:break-all; }
+  table { width:100%; border-collapse:collapse; background:var(--card); font-size:15px; } th,td { border:1px solid var(--line); padding:8px; text-align:left; vertical-align:top; }
+  .muted { color:var(--muted); } .box { border:2px solid var(--accent); border-radius:12px; padding:16px; text-align:center; background:var(--card); }
+  .big { font-size:22px; font-weight:700; color:var(--accent); } .nfa { font-size:18px; font-weight:700; margin-top:10px; }
+  @media (max-width:600px) { table { font-size:13px; } }
+</style>
+</head>
+<body><main>
+<h1>Agent Alpha Hunter：使用指南</h1>
+<div class="muted">更新于 2026-10-24 · 作者 <a href="https://x.com/HoangFUDSCAM">x : @HoangFUDSCAM</a> · <a href="HUONG-DAN-SU-DUNG.html">Tiếng Việt</a> · <a href="GUIDE-EN.html">English</a></div>
+
+<h2>机器人能做什么</h2>
+<p>Agent Alpha Hunter 运行在你自己的电脑上，用于发现并铸造 BNB Chain 上的 "alpha" NFT。所有交易都通过 Binance Agentic Wallet 完成。机器人绝不会索要助记词或私钥。</p>
+<ul>
+  <li><b>发现热门 NFT：</b>扫描链上正在大量铸造的 NFT，统计铸造者中持有 Agent ID (.ai) 的比例，并结合 X 和 gang.fun 的信号。</li>
+  <li><b>铸造前显示完整信息：</b>合约价格、其他人支付的价格、当前售价、预估利润、实时已铸造数量、每钱包上限、安全分 0–100。</li>
+  <li><b>每个 NFT 的项目规则</b>（来自合约和项目网站），以及项目的 X 链接。</li>
+  <li><b>一键铸造：</b>选择数量，点击 Mint，确认。还有"等待开放铸造"按钮，开放时提醒你确认。</li>
+  <li><b>出售与清理：</b>为持有的 NFT 查找最高售价，查看并撤销代币授权。</li>
+  <li><b>🔥 Hot</b>（0–100）表示项目热度（铸造钱包数、Agent ID 比例、X 提及），不是安全分。<b>💎 宝藏</b>表示仅限 Agent ID、铸造较慢、知道的人还不多的项目。</li>
+  <li><b>仿冒提醒：</b>两个合约同名时，铸造较少的那个会显示红色"可能是仿冒"警告。</li>
+  <li><b>自动学习铸造方式：</b>合约使用特殊铸造函数时，机器人会复制他人成功铸造的调用（替换成你的钱包和 Agent ID）。每次铸造仍需你确认。</li>
+  <li><b>三种语言：</b>右上角 VI / EN / 中文 按钮。</li>
+</ul>
+
+<h2>准备工作</h2>
+<ol>
+  <li><b>Node.js 20 或更高版本：</b>在 <a href="https://nodejs.org">nodejs.org</a> 下载 LTS 版本并正常安装。</li>
+  <li><b>Binance Agentic Wallet：</b>在 Binance App 中开通，并充值少量 BNB 用于 gas 和铸造费用。在 App 中为 Agentic Wallet 开启 <b>Developer Mode</b>，否则机器人无法发送铸造交易。</li>
+  <li><b>Agent ID (.ai)：</b>很多项目只允许持有 Agent ID 的钱包铸造。如果你的钱包没有，机器人会提示。</li>
+  <li><b>建议：</b>在 Binance App 中为 Agentic Wallet 设置较低的 <b>Daily Limit</b>。这是 Binance 端的安全措施，不依赖机器人。</li>
+</ol>
+
+<h2>安装与运行</h2>
+<ol>
+  <li>把 <b>nft-alpha-bot.zip</b> 解压到一个文件夹，例如 <code>C:\nft-alpha-bot</code>。</li>
+  <li>启动：<b>Windows</b> 双击 <b>start.bat</b>；<b>Mac</b> 双击 <b>start.command</b>（如被系统拦截，右键文件选择"打开"）。</li>
+  <li>首次运行会自动安装依赖库和 Binance 的 <code>baw</code> 钱包工具，约需 1–2 分钟。</li>
+  <li>浏览器会自动打开 <b>http://127.0.0.1:3777</b>。若未打开，请手动访问该地址。</li>
+  <li>使用期间保持黑色命令行窗口开启，关闭它就会停止机器人。</li>
+</ol>
+<p>更新版本：把新版本解压覆盖旧文件夹即可。<code>data</code> 文件夹（支出记录、私有 RPC、已发现的 NFT）会保留。</p>
+
+<h2>登录钱包并设置私有 RPC</h2>
+<p><b>登录：</b>点击页面顶部的<b>登录钱包</b>。机器人会显示链接和配对码；打开链接，核对配对码一致后在 Binance App 中确认。完成后钱包标签变绿并显示余额。如果提示缺少 <code>baw</code>，先点击<b>安装 baw</b>。</p>
+<p><b>私有 RPC（建议）：</b>免费公共 RPC 经常过载，导致扫描慢或找不到 NFT。免费私有 RPC 只需 2 分钟：</p>
+<ol>
+  <li>打开 <a href="https://nodereal.io/invite/8404ae7b-f5ed-4d38-acf7-1e03e9711676">NodeReal</a>，用 Google 或 GitHub 注册。</li>
+  <li>点击 <b>Create API Key</b>，任意命名。询问 Discord 时点击 <b>Skip</b>。</li>
+  <li>打开新建的 key，点击 <b>BSC RPC → Endpoint</b>，复制 <b>Mainnet HTTPS</b> 链接，形如 <code>https://bsc-mainnet.nodereal.io/v1/...</code>。</li>
+  <li>在机器人中打开 <b>⚙ 私有 RPC</b>，粘贴链接，点击<b>测试并保存</b>。顶部 RPC 标签显示"（私有）"即完成。</li>
+</ol>
+<p>RPC 只用于读取链上数据，无法动用你的钱包。链接包含 API key：不要分享，也不要截图。</p>
+
+<h2>日常使用</h2>
+<table>
+  <tr><th>要做的事</th><th>点击位置</th><th>说明</th></tr>
+  <tr><td>查看热门 NFT</td><td><b>热门 NFT</b> 区域</td><td>每 5 分钟自动扫描；点击<b>🔄 重新搜索</b>（带倒计时）或<b>重新扫描</b>立即扫描</td></tr>
+  <tr><td>检查在 X 上看到的 NFT</td><td>把合约地址 <code>0x...</code> 粘贴到顶部输入框，点击<b>检查</b></td><td>显示包含价格、上限、安全分的完整卡片</td></tr>
+  <tr><td>阅读项目规则</td><td>每张卡片上的<b>📜 项目规则</b></td><td>合约数据比项目网站的文字更可靠</td></tr>
+  <tr><td>铸造</td><td>选择数量（1、5、10、Max）→ <b>Mint N</b> → 查看摘要 → <b>确认</b></td><td>机器人会等待链上确认后才报告成功</td></tr>
+  <tr><td>开放即铸造</td><td><b>⏰ 等待开放铸造后提醒我确认</b></td><td>保持标签页打开；开放时机器人会响铃并弹出确认框</td></tr>
+  <tr><td>查找最高售价</td><td><b>出售持有的 NFT</b> → <b>查找最高售价</b></td><td>首次可能需要约 1 分钟</td></tr>
+  <tr><td>用特殊函数铸造</td><td><b>🛠 高级铸造</b> → 合约、函数、参数、BNB → <b>预览并铸造</b></td><td>仅在机器人无法识别铸造函数时使用。模拟、支出上限和确认步骤照常</td></tr>
+  <tr><td>撤销代币授权</td><td><b>已授权的代币权限</b> → <b>查看授权</b> → <b>Revoke</b></td><td>优先撤销"无限"或有风险的授权</td></tr>
+</table>
+<p>如果合约的 <code>mint()</code> 每次只铸造 1 个 NFT：选择 3 个时，机器人会依次发送 3 笔交易，每笔单独确认。每次都会自动探测价格，因为第一次可能免费。</p>
+<p>机器人不会挂单出售 NFT。挂单需要给交易市场 <code>setApprovalForAll</code> 授权，请在交易市场官网（例如 Element）操作。</p>
+
+<h2>安全与限制</h2>
+<ul>
+  <li>绝不索要或保存助记词、私钥。由 Binance 为钱包签名。</li>
+  <li>绝不自动铸造：每次铸造都需要你点击确认。</li>
+  <li>支出上限：每次最多 0.05 BNB，每天最多 0.2 BNB（可在 <code>config.json</code> 中修改）。</li>
+  <li>拦截盗币合约常用的调用：<code>setApprovalForAll</code>、<code>transfer</code>、<code>permit</code>，以及金额不符的 approve。如果 Binance 模拟发现交易向他人授权，也会拦截。</li>
+  <li>安全分低于 60：必须勾选"我已自行检查合约"才能铸造。低于 40：始终拦截。</li>
+  <li>界面只在你的电脑上运行（127.0.0.1），其他网站无法调用。</li>
+</ul>
+<p>注意：安全分只是粗略筛选，不是认证。翻译的项目规则是对项目方文字的机器翻译。不要把助记词粘贴到任何地方，包括"客服"或 AI。</p>
+
+<h2>常见问题</h2>
+<table>
+  <tr><th>机器人提示</th><th>处理方法</th></tr>
+  <tr><td><code>spawnSync baw ENOENT</code> 或"未安装 baw"</td><td>点击<b>安装 baw</b>，完成后重新登录</td></tr>
+  <tr><td>"RPC 不返回日志"、扫描慢、找不到 NFT</td><td>设置私有 RPC（见上文）</td></tr>
+  <tr><td>刚铸造的 NFT 不在钱包列表里</td><td>把 NFT 合约地址粘贴到"添加 NFT 地址"，再次点击<b>查找最高售价</b></td></tr>
+  <tr><td>"你的钱包没有 Agent ID"</td><td>该项目只允许持有 Agent ID (.ai) 的钱包铸造，请先注册 Agent ID</td></tr>
+  <tr><td>"安全分……低于阈值"</td><td>自行在 BscScan 检查合约；分数 40 及以上时可勾选自检框</td></tr>
+  <tr><td>"超出每日上限"</td><td>今天已花费 0.2 BNB；等到明天，或在 <code>config.json</code> 中提高 <code>maxDailyBNB</code></td></tr>
+  <tr><td>"合约拒绝了铸造"</td><td>铸造尚未开放、已达每钱包上限，或缺少项目规则中的条件</td></tr>
+</table>
+<p>仍有问题：截图页面底部的<b>日志</b>区域，在 X 上发给 <a href="https://x.com/HoangFUDSCAM">@HoangFUDSCAM</a>。如不想公开，请遮住 API key 和钱包地址。</p>
+
+<h2>支持作者</h2>
+<div class="box">
+  <div class="big">如果觉得这个机器人好用，请我喝几杯冰茶，让我更有动力开发更多机器人！☕</div>
+  <p>BNB (BSC): <code>0xe85613938f85e8d791b8427a6b57d8fa864f1e97</code><br>ETH: <code>0xe85613938f85e8d791b8427a6b57d8fa864f1e97</code></p>
+  <div class="nfa">NFA · DYOR：非财务建议，铸造前请自行研究。</div>
+</div>
+</main></body></html>

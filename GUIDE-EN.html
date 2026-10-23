@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Alpha Hunter: User Guide</title>
+<style>
+  :root { --bg:#f6f6f4; --card:#fff; --text:#1b1b1b; --muted:#6b6b6b; --line:#e3e3e0; --accent:#b38300; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111214; --card:#1b1c1f; --text:#ececec; --muted:#9a9a9a; --line:#2c2d31; --accent:#f0b90b; } }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:860px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:28px; margin:0 0 4px; } h2 { font-size:21px; margin:32px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  a { color:var(--accent); } code { background:var(--card); border:1px solid var(--line); border-radius:4px; padding:1px 5px; font-size:14px; word-break:break-all; }
+  table { width:100%; border-collapse:collapse; background:var(--card); font-size:15px; } th,td { border:1px solid var(--line); padding:8px; text-align:left; vertical-align:top; }
+  .muted { color:var(--muted); } .box { border:2px solid var(--accent); border-radius:12px; padding:16px; text-align:center; background:var(--card); }
+  .big { font-size:22px; font-weight:700; color:var(--accent); } .nfa { font-size:18px; font-weight:700; margin-top:10px; }
+  @media (max-width:600px) { table { font-size:13px; } }
+</style>
+</head>
+<body><main>
+<h1>Agent Alpha Hunter: User Guide</h1>
+<div class="muted">Updated 24 Oct 2026 · by <a href="https://x.com/HoangFUDSCAM">x : @HoangFUDSCAM</a> · <a href="HUONG-DAN-SU-DUNG.html">Tiếng Việt</a> · <a href="GUIDE-ZH.html">中文</a></div>
+
+<h2>What the bot does</h2>
+<p>Agent Alpha Hunter runs on your own computer to find and mint "alpha" NFTs on BNB Chain. Every transaction goes through Binance Agentic Wallet. The bot never asks for your seed phrase or private key.</p>
+<ul>
+  <li><b>Finds hot NFTs:</b> scans NFTs being minted heavily on-chain, measures what % of minters hold an Agent ID (.ai), and adds signals from X and gang.fun.</li>
+  <li><b>Shows everything before you mint:</b> contract price, what others are paying, current sale price, estimated profit, live minted count, per-wallet limit, safety score 0–100.</li>
+  <li><b>Project rules for every NFT</b>, read from the contract and the project website, plus the project's X link.</li>
+  <li><b>One-click mint:</b> pick a quantity, press Mint, confirm. A "wait for mint to open" button alerts you when minting starts.</li>
+  <li><b>Sell and clean up:</b> find the best sell price for NFTs you hold, view and revoke token approvals.</li>
+  <li><b>🔥 Hot</b> (0–100) shows how much attention a project gets (minting wallets, Agent ID ratio, mentions on X). It is not a safety score. <b>💎 Gem</b> marks Agent-ID-only projects that mint slowly and few people know about yet.</li>
+  <li><b>Lookalike warning:</b> when two contracts share a name, the one with fewer mints gets a red "possible fake" warning.</li>
+  <li><b>Learns how to mint:</b> if a contract uses an unusual mint function, the bot copies the call from someone else's successful mint (swapping in your wallet and Agent ID). You still confirm every mint.</li>
+  <li><b>3 languages:</b> VI / EN / 中文 buttons at the top right.</li>
+</ul>
+
+<h2>Before you start</h2>
+<ol>
+  <li><b>Node.js 20 or newer:</b> download the LTS version from <a href="https://nodejs.org">nodejs.org</a> and install it like any other app.</li>
+  <li><b>Binance Agentic Wallet:</b> enable it in the Binance app and deposit a little BNB for gas and mint fees. In the app, turn on <b>Developer Mode</b> for the Agentic Wallet, otherwise the bot cannot send mint transactions.</li>
+  <li><b>Agent ID (.ai):</b> many projects only allow wallets with an Agent ID to mint. The bot tells you if your wallet has none.</li>
+  <li><b>Recommended:</b> set a low <b>Daily Limit</b> for the Agentic Wallet in the Binance app. This is a Binance-side safety layer that does not depend on the bot.</li>
+</ol>
+
+<h2>Install and run</h2>
+<ol>
+  <li>Unzip <b>nft-alpha-bot.zip</b> into a folder, for example <code>C:\nft-alpha-bot</code>.</li>
+  <li>Start the bot: on <b>Windows</b> double-click <b>start.bat</b>; on <b>Mac</b> double-click <b>start.command</b> (if macOS blocks it, right-click the file and choose Open).</li>
+  <li>The first run installs libraries and Binance's <code>baw</code> wallet tool, which takes about 1–2 minutes.</li>
+  <li>Your browser opens <b>http://127.0.0.1:3777</b> automatically. If not, open that address yourself.</li>
+  <li>Keep the black command window open while you use the bot. Closing it stops the bot.</li>
+</ol>
+<p>To update: unzip the new version over the old folder. The <code>data</code> folder (spending log, private RPC, found NFTs) is kept.</p>
+
+<h2>Log in and set a private RPC</h2>
+<p><b>Log in:</b> press <b>Log in wallet</b> at the top. The bot shows a link and a pairing code; open the link, check that the code matches, then confirm in the Binance app. The wallet pill turns green and shows your balance. If the bot says <code>baw</code> is missing, press <b>Install baw</b> first.</p>
+<p><b>Private RPC (recommended):</b> free public RPCs are often overloaded, which makes scans slow or empty. A free private RPC takes 2 minutes:</p>
+<ol>
+  <li>Go to <a href="https://nodereal.io/invite/8404ae7b-f5ed-4d38-acf7-1e03e9711676">NodeReal</a> and sign up with Google or GitHub.</li>
+  <li>Press <b>Create API Key</b> and give it any name. If asked about Discord, press <b>Skip</b>.</li>
+  <li>Open the new key, press <b>BSC RPC → Endpoint</b>, and copy the <b>Mainnet HTTPS</b> link, like <code>https://bsc-mainnet.nodereal.io/v1/...</code>.</li>
+  <li>In the bot, open <b>⚙ Private RPC</b>, paste the link, press <b>Test &amp; save</b>. The RPC pill at the top shows "(private)" when done.</li>
+</ol>
+<p>The RPC only reads chain data and cannot touch your wallet. The link contains an API key: do not share it or screenshot it.</p>
+
+<h2>Daily use</h2>
+<table>
+  <tr><th>Task</th><th>Where to click</th><th>Notes</th></tr>
+  <tr><td>See hot NFTs</td><td><b>Hot NFTs</b> section</td><td>Auto-scans every 5 minutes; press <b>🔄 Search again</b> (with countdown) or <b>Rescan</b> to scan now</td></tr>
+  <tr><td>Check an NFT seen on X</td><td>Paste the contract address <code>0x...</code> in the top box, press <b>Check</b></td><td>Shows a full card with price, limits and safety score</td></tr>
+  <tr><td>Read project rules</td><td><b>📜 Project rules</b> on each card</td><td>Contract data is more reliable than text from the project site</td></tr>
+  <tr><td>Mint</td><td>Choose quantity (1, 5, 10, Max) → <b>Mint N</b> → review → <b>Confirm</b></td><td>The bot waits for on-chain confirmation before reporting success</td></tr>
+  <tr><td>Mint the moment it opens</td><td><b>⏰ Wait for mint to open, then ask me to confirm</b></td><td>Keep the tab open; the bot beeps and shows the confirm box</td></tr>
+  <tr><td>Find the best sell price</td><td><b>Sell NFTs you hold</b> → <b>Find best sell price</b></td><td>First run can take up to 1 minute</td></tr>
+  <tr><td>Mint with an unusual function</td><td><b>🛠 Advanced mint</b> → contract, function, arguments, BNB → <b>Preview &amp; mint</b></td><td>Only when the bot cannot detect the mint function. Simulation, spending caps and Confirm still apply</td></tr>
+  <tr><td>Revoke token approvals</td><td><b>Token approvals</b> → <b>View approvals</b> → <b>Revoke</b></td><td>Revoke "unlimited" or risky approvals first</td></tr>
+</table>
+<p>Contracts whose <code>mint()</code> gives 1 NFT per call: choose 3 and the bot sends 3 transactions one after another, each confirmed separately. The price is probed each time because the first mint may be free.</p>
+<p>The bot never lists NFTs for sale. Listing needs <code>setApprovalForAll</code> for the marketplace, so do it on the marketplace's official site (for example Element).</p>
+
+<h2>Safety and limits</h2>
+<ul>
+  <li>Never asks for or stores a seed phrase or private key. Binance signs for the wallet.</li>
+  <li>Never mints on its own: you press Confirm for every mint.</li>
+  <li>Spending caps: at most 0.05 BNB per mint and 0.2 BNB per day (change in <code>config.json</code> if needed).</li>
+  <li>Blocks calls drainers use: <code>setApprovalForAll</code>, <code>transfer</code>, <code>permit</code>, and approvals for the wrong amount. Also blocks if Binance's simulation sees the transaction granting permissions to someone else.</li>
+  <li>Safety score below 60: you must tick "I have checked the contract myself" to mint. Below 40: always blocked.</li>
+  <li>The interface only runs on your computer (127.0.0.1); other websites cannot call it.</li>
+</ul>
+<p>Good to know: the safety score is a rough filter, not a certificate. Translated project rules are machine translations of text the project wrote. Never paste your seed phrase anywhere, including to "support agents" or AI.</p>
+
+<h2>Common problems</h2>
+<table>
+  <tr><th>The bot says</th><th>What to do</th></tr>
+  <tr><td><code>spawnSync baw ENOENT</code> or "baw not installed"</td><td>Press <b>Install baw</b>, wait, then log in again</td></tr>
+  <tr><td>"RPC returns no logs", slow scans, no NFTs found</td><td>Set a private RPC (see above)</td></tr>
+  <tr><td>A freshly minted NFT is missing from your wallet</td><td>Paste the NFT contract into "Add NFT address" and press <b>Find best sell price</b> again</td></tr>
+  <tr><td>"Your wallet has no Agent ID"</td><td>The project only allows Agent ID (.ai) wallets; register an Agent ID first</td></tr>
+  <tr><td>"Safety score ... below threshold"</td><td>Check the contract on BscScan yourself; at 40 or above you can tick the self-check box</td></tr>
+  <tr><td>"Daily cap exceeded"</td><td>You already spent 0.2 BNB today; wait until tomorrow or raise <code>maxDailyBNB</code> in <code>config.json</code></td></tr>
+  <tr><td>"The contract rejected the mint"</td><td>Mint not open yet, per-wallet limit reached, or a condition in Project rules is missing</td></tr>
+</table>
+<p>Still stuck: screenshot the <b>Log</b> section at the bottom of the page and send it to <a href="https://x.com/HoangFUDSCAM">@HoangFUDSCAM</a> on X. Hide your API key and wallet address if you prefer.</p>
+
+<h2>Support the author</h2>
+<div class="box">
+  <div class="big">If you like this BOT, buy me a few iced teas so I stay motivated to build more bots! ☕</div>
+  <p>BNB (BSC): <code>0xe85613938f85e8d791b8427a6b57d8fa864f1e97</code><br>ETH: <code>0xe85613938f85e8d791b8427a6b57d8fa864f1e97</code></p>
+  <div class="nfa">NFA · DYOR: not financial advice, do your own research before minting.</div>
+</div>
+</main></body></html>

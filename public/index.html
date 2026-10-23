@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Alpha Hunter</title>
+<style>
+  :root { --bg:#f6f6f4; --card:#fff; --text:#1b1b1b; --muted:#6b6b6b; --line:#e3e3e0; --accent:#c99400; --accent-text:#1b1b1b; --ok:#1f8a4c; --warn:#b26b00; --bad:#c0392b; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#111214; --card:#1b1c1f; --text:#ececec; --muted:#9a9a9a; --line:#2c2d31; --accent:#f0b90b; --accent-text:#111; --ok:#3fbf75; --warn:#e0a030; --bad:#ff6b5b; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:980px; margin:0 auto; padding:16px; }
+  h1 { font-size:22px; margin:0; letter-spacing:.2px; }
+  .brand { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:6px 16px; margin-bottom:4px; }
+  .tag { font-size:12px; font-weight:600; background:var(--accent); color:var(--accent-text); border-radius:999px; padding:2px 8px; vertical-align:middle; margin-left:6px; }
+  .sig { font-size:13px; font-weight:600; color:var(--accent); text-decoration:none; border:1px solid var(--accent); border-radius:999px; padding:3px 10px; }
+.brandr { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .langs { display:flex; border:1px solid var(--line, #333); border-radius:999px; overflow:hidden; }
+  .langs button { border:0; border-radius:0; padding:3px 9px; font-size:12px; background:transparent; }
+  .langs button.on { background:var(--accent); color:var(--accent-text); font-weight:700; }
+  .sig:hover { background:var(--accent); color:var(--accent-text); }
+  .muted { color:var(--muted); font-size:13px; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:12px 0; }
+  .pill { background:var(--card); border:1px solid var(--line); border-radius:999px; padding:4px 10px; font-size:13px; }
+  .ok { color:var(--ok); } .warn { color:var(--warn); } .bad { color:var(--bad); }
+  button { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--text); border-radius:8px; padding:7px 12px; cursor:pointer; }
+  button.primary { background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  input { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); flex:1; min-width:0; }
+  .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:8px; }
+  .card h3 { margin:0; font-size:16px; display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+  .card h3 .badges { display:flex; gap:4px; flex-shrink:0; }
+  .card h3 .hot { align-self:flex-start; line-height:20px; }
+  .addr { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--muted); word-break:break-all; }
+  a { color:var(--accent); }
+  .addr a { color:inherit; }
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; font-size:13px; }
+  .stats b { font-weight:600; }
+  .btns { display:flex; gap:8px; }
+  .btns button { flex:1; }
+  details { font-size:12px; color:var(--muted); }
+  .hot { background:var(--accent); color:var(--accent-text); border-radius:6px; padding:0 6px; font-size:12px; font-weight:700; white-space:nowrap; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td, th { text-align:left; padding:6px 4px; border-bottom:1px solid var(--line); }
+  .log { font-family:ui-monospace,Menlo,monospace; font-size:12px; color:var(--muted); white-space:pre-wrap; max-height:140px; overflow:auto; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px; }
+  dialog { border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--text); max-width:min(460px,calc(100vw - 32px)); padding:18px; }
+  dialog::backdrop { background:rgba(0,0,0,.5); }
+  section { margin-top:22px; }
+  .rows { display:flex; flex-direction:column; gap:3px; font-size:13px; }
+  .qty { display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .qty input { flex:0 0 64px; text-align:center; }
+  .qty button { padding:6px 10px; }
+  .chip { font-size:12px; }
+  .mintbtn { width:100%; }
+  .balance { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 14px; margin:8px 0; display:flex; flex-wrap:wrap; gap:6px 18px; align-items:baseline; }
+  .balance .total { font-size:18px; font-weight:700; }
+  .progress { height:6px; background:var(--line); border-radius:3px; overflow:hidden; margin-top:6px; }
+  .progress > div { height:100%; background:var(--accent); transition:width .3s; }
+  .loginbox { background:var(--card); border:1px solid var(--accent); border-radius:12px; padding:14px; margin:8px 0; }
+  .code { font:700 28px/1.2 ui-monospace,Menlo,monospace; letter-spacing:6px; }
+  h2 { font-size:16px; margin:0 0 8px; }
+.links { font-size: 13px; margin: 2px 0 6px; }
+.donate { margin: 32px 0 16px; padding: 18px; border: 1px solid var(--accent); border-radius: 12px; text-align: center; }
+.donate .big { font-size: 22px; font-weight: 700; color: var(--accent); margin-bottom: 12px; line-height: 1.35; }
+.donate .addrs { display: grid; gap: 6px; margin-bottom: 10px; word-break: break-all; }
+.donate .nfa { font-size: 18px; font-weight: 700; margin: 10px 0 4px; }
+.live { color:var(--ok); font-size:11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <h1>🦅 Agent Alpha Hunter <span class="tag">BNB Chain · .ai Agent ID</span></h1>
+    <span class="brandr"><span class="langs"><button data-lang="vi">VI</button><button data-lang="en">EN</button><button data-lang="zh">中文</button></span>
+    <a class="sig" href="https://x.com/HoangFUDSCAM" target="_blank" rel="noopener">x : @HoangFUDSCAM</a></span>
+  </div>
+  <div class="muted">Tìm NFT đang mint nóng, mint bằng Binance Agentic Wallet. Không phải lời khuyên đầu tư, luôn DYOR.</div>
+
+  <div class="bar">
+    <span class="pill" id="wallet">Ví: đang kiểm tra…</span>
+    <span id="walletActions"></span>
+    <span class="pill" id="rpc">RPC: …</span>
+    <span class="pill" id="spent">Đã chi hôm nay: …</span>
+    <span class="pill" id="price">1 BNB ≈ … USDT</span>
+    <button id="scanBtn" class="primary">Quét lại</button>
+  </div>
+
+  <details id="rpcBox"><summary class="muted">⚙ RPC riêng (nhanh và ổn định hơn RPC công khai)</summary>
+    <div class="bar">
+      <input id="rpcUrl" placeholder="Dán link RPC BSC, vd. https://bsc-mainnet.nodereal.io/v1/xxxx">
+      <button id="rpcSave" class="primary">Kiểm tra &amp; lưu</button>
+      <button id="rpcReset">Về RPC công khai</button>
+    </div>
+    <div id="rpcMsg" class="muted">Chưa có RPC? Tạo miễn phí trong 2 phút tại <a id="noderealLink" href="https://nodereal.io" target="_blank" rel="noopener">NodeReal</a>. Link có chứa API key, chỉ lưu trên máy bạn (data/rpc.json). Đừng chia sẻ.</div>
+  </details>
+  <div class="bar" id="agentBar">
+    <span class="muted">Agent ID của bạn:</span>
+    <input id="agentName" placeholder="hoangfud" style="max-width:200px"><span class="muted">.ai</span>
+    <button id="agentSave">Lưu</button>
+    <span id="agentMsg" class="muted">Cần cho dự án mint theo Agent ID</span>
+  </div>
+  <div id="loginBox"></div>
+  <div id="balance" class="balance" hidden></div>
+  <div id="waitBox"></div>
+
+  <div class="bar">
+    <input id="addr" placeholder="Dán địa chỉ NFT thấy trên X (0x…) để kiểm tra">
+    <button id="checkBtn">Kiểm tra</button>
+  </div>
+  <div id="checked" class="grid"></div>
+
+  <details id="advBox"><summary class="muted">🛠 Mint nâng cao (tự chọn hàm, tham số, số BNB)</summary>
+    <div class="muted">Dùng khi dự án mint bằng hàm lạ mà bot không tự nhận ra. Vẫn qua đủ các lớp an toàn: mô phỏng, preview của Binance, giới hạn chi tiêu, và bạn phải bấm Xác nhận.</div>
+    <div class="bar">
+      <input id="advAddr" placeholder="Địa chỉ hợp đồng NFT (0x…)">
+      <input id="advFn" placeholder="Hàm, vd. mint(uint256,uint256)" style="max-width:260px">
+    </div>
+    <div class="bar">
+      <input id="advArgs" placeholder="Tham số, cách nhau dấu phẩy, vd. 1234, 2 (để trống nếu không có)">
+      <input id="advValue" placeholder="BNB gửi kèm, vd. 0.01 (trống = bot tự dò)" style="max-width:220px">
+      <input id="advQty" type="number" min="1" value="1" style="max-width:80px" title="Số lượng (để tính chi phí)">
+    </div>
+    <div class="bar">
+      <label class="muted"><input type="checkbox" id="advAck"> Tôi đã tự kiểm tra hợp đồng (cho phép mint khi điểm an toàn thấp)</label>
+      <button id="advBtn" class="primary">Xem trước &amp; mint</button>
+    </div>
+  </details>
+
+  <section>
+    <h2>NFT đang hot <span class="muted" id="scanInfo"></span> <button id="rescanBtn" class="primary">🔄 Tìm lại</button> <span class="muted" id="nextScan"></span></h2>
+    <div id="scanProgress"></div>
+    <div id="nfts" class="grid"><div class="muted">Đang quét lần đầu, mất khoảng 30–90 giây…</div></div>
+  </section>
+
+  <section>
+    <h2>Bán NFT đang giữ</h2>
+    <div class="muted">Tìm giá cao nhất cho NFT trong ví: lệnh mua đang chờ trên Element (bán ngay được) và giá bán gần đây trên chain (tham khảo).</div>
+    <div class="bar">
+      <input id="sellWallet" placeholder="Ví cần xem (để trống = ví Agentic đang đăng nhập)">
+      <input id="sellExtra" placeholder="Thêm địa chỉ NFT (0x…, cách nhau dấu phẩy)">
+      <button id="sellBtn" class="primary">Tìm giá bán cao nhất</button>
+    </div>
+    <div id="sell"></div>
+  </section>
+
+  <section>
+    <h2>Quyền token đã cấp (approve)</h2>
+    <div class="muted">Các hợp đồng đang được phép tiêu token trong ví của bạn. Thu hồi (revoke) những quyền không dùng nữa, nhất là quyền "vô hạn" hoặc bị đánh dấu rủi ro.</div>
+    <div class="bar"><button id="apprBtn">Xem quyền đã cấp</button></div>
+    <div id="appr"></div>
+  </section>
+
+  <section>
+    <h2>Token mới trên gang.fun <span class="muted">(chỉ ví có Agent ID mua được, dùng gang CLI)</span></h2>
+    <div id="tokens" class="muted">…</div>
+  </section>
+
+  <section>
+    <h2>Nhật ký</h2>
+    <div class="log" id="log"></div>
+  </section>
+</div>
+
+<dialog id="dlg">
+  <div id="dlgBody"></div>
+  <div class="btns" style="margin-top:14px">
+    <button id="cancelBtn">Huỷ</button>
+    <button id="confirmBtn" class="primary">Xác nhận mint</button>
+  </div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+const short = (a) => a.slice(0, 6) + '…' + a.slice(-4);
+let limits = { minRiskScore: 60 };
+let pendingId = null;
+let shownScan = null;
+let rate = null;
+const usd = (bnb) => (rate && bnb != null && Number(bnb) > 0 ? `≈ ${(Number(bnb) * rate).toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 })} USDT` : '');
+
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {});
+  return r.json();
+}
+
+function riskClass(score) { return score >= 80 ? 'ok' : score >= limits.minRiskScore ? 'warn' : 'bad'; }
+
+const bnb = (v, d = 5) => (v == null ? '?' : Number(v).toFixed(d).replace(/\.?0+$/, '') || '0');
+const money = (v) => (v == null ? '?' : Number(v) === 0 ? 'Miễn phí' : `${bnb(v)} BNB <span class="muted">${usd(v)}</span>`);
+
+// Luật từ trang dự án: tải khi mở mục Luật, nhớ lại để không mất khi giao diện vẽ lại.
+const webRules = new Map();
+const openRules = new Set();
+function webRulesHtml(addr) {
+  const w = webRules.get(addr);
+  if (!w) return '<span class="muted">Mở mục này để tải luật từ trang dự án (tự dịch sang tiếng Việt)…</span>';
+  if (w === 'loading') return '<span class="muted">Đang đọc trang dự án và dịch…</span>';
+  if (!w.ok) return `<span class="bad">${esc(w.error || 'Không tải được')}</span>`;
+  const parts = [];
+  if (w.checks?.length) parts.push(`<div class="muted">Điều kiện khác trong hợp đồng (dịch máy):</div><ul>${w.checks.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`);
+  if (w.description) parts.push(`<div class="muted">Giới thiệu (dịch máy):</div><div>${esc(w.description)}</div>`);
+  if (w.rules?.length) parts.push(`<div class="muted">Luật trên trang dự án${w.site ? ` (<a href="${esc(w.site)}" target="_blank" rel="noopener">${esc(w.site.replace(/^https:\/\//, ''))}</a>)` : ''}, dịch máy, dự án tự viết nên hãy đối chiếu:</div><ul>${w.rules.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`);
+  else parts.push(`<span class="muted">${w.site ? `Trang <a href="${esc(w.site)}" target="_blank" rel="noopener">${esc(w.site.replace(/^https:\/\//, ''))}</a> không có mục luật đọc được.` : 'Dự án không ghi trang web trong metadata.'} Luật bên trên là từ hợp đồng.</span>`);
+  return parts.join('');
+}
+document.addEventListener('toggle', async (e) => {
+  const d = e.target;
+  if (!d.matches?.('details[data-rules]')) return;
+  const a = d.dataset.rules;
+  if (!d.open) { openRules.delete(a); return; }
+  openRules.add(a);
+  if (webRules.has(a) || !d.querySelector('[data-web]')) return;
+  webRules.set(a, 'loading');
+  d.querySelector('[data-web]').innerHTML = webRulesHtml(a);
+  const r = await api('/api/rules', { address: a }).catch((err) => ({ ok: false, error: err.message }));
+  webRules.set(a, r);
+  document.querySelectorAll(`details[data-rules="${CSS.escape(a)}"] [data-web]`).forEach((el) => { el.innerHTML = webRulesHtml(a); });
+}, true);
+
+function card(n) {
+  const HARD_MIN = 40;
+  const canMint = n.risk != null && n.risk >= HARD_MIN && n.paused !== true && n.mintFn && (n.maxQty ?? 0) > 0;
+  const needsAck = canMint && (n.risk < limits.minRiskScore || Boolean(n.lookalike));
+  const max = n.maxQty ?? 0;
+  const contractPrice = n.priceBNB == null ? '<span class="muted">không đọc được (bot dò giá thật lúc bấm Mint)</span>' : Number(n.priceBNB) === 0 ? '<b class="ok">Miễn phí</b>'
+    : n.payToken !== 'BNB' ? `<b>${esc(n.priceToken)} ${esc(n.payToken)}</b> <span class="muted">(≈ ${bnb(n.priceBNB)} BNB)</span>` : `<b>${money(n.priceBNB)}</b>`;
+  // Hợp đồng không có hàm đọc số đã mint: dùng số mint bot thấy trong lúc quét (ít nhất là vậy).
+  const mintedTxt = n.minted ?? (n.mints ? `≥${n.mints}` : 'không rõ');
+  const cap = n.rules?.publicSupply ? `${n.rules.publicSupply} công khai` : n.maxSupply;
+  const supply = cap ? `${mintedTxt} / ${cap}` : mintedTxt;
+  const r = n.rules || {};
+  const rulesHtml = `<details data-rules="${esc(n.address)}"${r.rules?.length || openRules.has(n.address) ? ' open' : ''}><summary>📜 Luật dự án${r.project ? ' · ' + esc(r.project) : ''}</summary>
+    ${r.auto?.length ? `<div class="muted">Số liệu đọc từ hợp đồng:</div><ul>${r.auto.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+    ${r.checks?.length ? `<div class="muted">Điều kiện hợp đồng thực sự kiểm tra khi mint:</div><ul>${r.checks.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+    ${r.rules?.length ? `<div class="muted">Theo trang dự án${r.site ? ` (<a href="${esc(r.site)}" target="_blank" rel="noopener">${esc(r.site.replace('https://', ''))}</a>)` : ''}:</div><ul>${r.rules.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : `<div data-web>${webRulesHtml(n.address)}</div>`}
+  </details>`;
+  const bonus = r.setBonus ? `<div class="ok">🎁 ${esc(r.setBonus.text)}</div>` : '';
+  const paid = n.paid ? (n.paid.free ? '<b class="ok">Miễn phí</b>' : `<b>${money(n.paid.priceBNB)}</b>`) + (n.paid.gasBNB ? ` <span class="muted">+ gas ${bnb(n.paid.gasBNB, 6)} BNB ${usd(n.paid.gasBNB)}</span>` : '') : '<span class="muted">chưa có dữ liệu</span>';
+  const sale = n.sales?.count ? `<b>${money(n.sales.medianBNB)}</b> <span class="muted">· cao nhất ${bnb(n.sales.maxBNB)} BNB · ${n.sales.count} giao dịch</span>` : '<span class="muted">chưa có giao dịch bán</span>';
+  const profit = n.profitBNB == null ? '' : `<div>Lãi ước tính/NFT: <b class="${n.profitBNB >= 0 ? 'ok' : 'bad'}">${n.profitBNB >= 0 ? '+' : ''}${bnb(n.profitBNB)} BNB ${usd(Math.abs(n.profitBNB)) ? (n.profitBNB >= 0 ? '≈ +' : '≈ −') + usd(Math.abs(n.profitBNB)).slice(2) : ''}</b> <span class="muted">(bán ở giá trung vị, chưa trừ phí sàn)</span></div>`;
+  const quick = [...new Set([1, 5, 10, max].filter((q) => q >= 1 && q <= max))];
+  return `<div class="card" data-card="${esc(n.address)}" data-price="${esc(n.walletPriceBNB ?? n.priceBNB ?? 0)}" data-noprice="${n.walletPriceBNB == null && (n.priceBNB == null || (n.paid?.free && Number(n.priceBNB) > 0)) ? 1 : 0}" data-max="${max}" data-token="${esc(n.payToken || 'BNB')}" data-tprice="${esc(n.priceToken ?? '')}" data-takesqty="${n.mintTakesQty === false ? '0' : '1'}" data-name="${esc(n.name || '')}">
+    <h3><span${n.name ? ' data-notr' : ''}>${esc(n.name || 'Không rõ tên')}</span><span class="badges">${n.gem ? '<span class="hot" title="Chỉ dành cho ví có Agent ID, mint chậm nên chưa nhiều người biết">💎 Gem</span> ' : ''}${n.hot != null ? `<span class="hot" title="Điểm hot 0–100: nhiều ví mint (40%) + tỉ lệ ví có Agent ID (40%) + số lần nhắc trên X (20%) + thưởng nếu là Gem. Càng cao càng nhiều người quan tâm, không phải điểm an toàn.">🔥 Hot ${n.hot}</span>` : ''}</span></h3>
+    ${n.lookalike ? `<div class="bad">⚠ <b>Có thể là hàng nhái:</b> trùng tên với hợp đồng <a href="https://bscscan.com/address/${esc(n.lookalike.of)}" target="_blank" rel="noopener">${esc(short(n.lookalike.of))}</a> đang có nhiều người mint hơn (${esc(n.lookalike.minted)}). Đối chiếu địa chỉ trên web/X chính thức của dự án trước khi mint.</div>` : n.twins?.length ? `<div class="warn">Có ${n.twins.length} hợp đồng khác trùng tên; thẻ này có nhiều người mint nhất. Vẫn nên đối chiếu địa chỉ với web chính thức.</div>` : ''}
+    <div class="addr"><a href="https://bscscan.com/address/${esc(n.address)}" target="_blank" rel="noopener">${esc(n.address)}</a></div>
+    <div class="links">${n.projectX ? `<a href="${esc(n.projectX)}" target="_blank" rel="noopener"><b>𝕏 ${esc(n.projectX.replace('https://x.com/', '@'))}</b></a> · ` : ''}<a href="https://x.com/search?q=${encodeURIComponent(n.address)}&f=live" target="_blank" rel="noopener">Tìm hợp đồng trên X</a>${n.name ? ` · <a href="https://x.com/search?q=${encodeURIComponent(n.name + ' mint')}&f=live" target="_blank" rel="noopener">Tìm <span data-notr>${esc(n.name)} mint</span></a>` : ''}</div>
+    <div class="rows">
+      <div>Giá trên hợp đồng: ${contractPrice}</div>
+      ${n.walletPriceBNB != null && n.walletPriceBNB !== n.priceBNB ? `<div>Giá lần mint tới của ví bạn: ${Number(n.walletPriceBNB) === 0 ? '<b class="ok">Miễn phí</b>' : `<b>${money(n.walletPriceBNB)}</b>`}</div>` : ''}
+      <div>Người khác đang trả: ${paid}</div>
+      ${n.paid?.free && Number(n.priceBNB) > 0 && n.walletPriceBNB == null ? '<div class="muted">ℹ Hợp đồng ghi có giá nhưng người khác đang mint miễn phí (có thể lần đầu free). Bot thử 0 BNB trước, giá thật hiện trong hộp xác nhận.</div>' : ''}
+      <div>Đang bán được: ${sale}</div>
+      ${profit}
+      ${n.agentMint ? (n.agent?.ok ? `<div class="ok">✓ Mint theo Agent ID: ${esc(n.agent.name || '#' + n.agent.tokenId.slice(0, 8) + '…')}</div>` : '<div class="warn">Dự án mint theo Agent ID: nhập tên .ai của bạn ở ô "Agent ID của bạn" phía trên rồi bấm Kiểm tra lại</div>') : ''}
+      ${n.hasAgentId === true ? '<div class="ok">✓ Ví của bạn có Agent ID</div>' : n.hasAgentId === false ? '<div class="bad">✗ Ví của bạn chưa có Agent ID (dự án agent-only sẽ từ chối)</div>' : ''}
+      ${n.startAt ? `<div>Mở mint: <b data-countdown="${n.startAt}"></b> <span class="muted">(${new Date(n.startAt * 1000).toLocaleString()})</span></div>` : ''}
+      ${n.mintOpen === false ? '<div class="warn">Hợp đồng báo mint đang đóng</div>' : ''}
+      ${n.mintTakesQty === false ? '<div class="muted">Hàm mint() mỗi lần ra 1 NFT: chọn N thì bot gửi N giao dịch, mỗi cái bạn xác nhận riêng. Giá từng lần được dò tự động (lần đầu có thể miễn phí).</div>' : ''}
+    </div>
+    <div class="stats">
+      <span>Tối đa/ví: <b>${esc(n.maxPerWallet ?? 'không rõ')}</b>${n.perWalletFrom === 'site' ? ' <span class="muted">(theo web dự án)</span>' : ''}${n.walletMinted && n.walletMinted !== '0' ? ` <span class="muted">(bạn có ${esc(n.walletMinted)})</span>` : ''}</span>
+      <span>Đã mint: <b ${n.mintedGetter ? `data-live="${esc(n.address)}" data-getter="${esc(n.mintedGetter)}" data-cap="${esc(cap ?? '')}" title="đọc từ ${esc(n.mintedGetter)}(), tự cập nhật 10 giây/lần"` : ''}>${esc(supply)}</b>${n.mintedGetter ? ' <span class="live">● live</span>' : ''}</span>
+      <span>Tối đa/lần: <b>${esc(n.maxPerTx ?? 'không rõ')}</b></span>
+      ${n.uniqueMinters != null ? `<span>Ví mint (~10 phút): <b>${esc(n.uniqueMinters)}</b></span><span>Ví Agent ID: <b>${Math.round((n.agentRatio ?? 0) * 100)}%</b></span>` : ''}
+      ${n.xMentions ? `<span>Nhắc trên X: <b>${esc(n.xMentions)}</b></span>` : ''}
+      <span>An toàn: <b class="${riskClass(n.risk ?? 0)}">${esc(n.risk ?? '?')}/100</b></span>
+      ${n.paused ? '<span class="bad">Đang tạm dừng</span>' : ''}
+    </div>
+    ${bonus}
+    ${rulesHtml}
+    <details><summary>Chi tiết rủi ro${n.mintFn ? ' · hàm ' + esc(n.mintFn) : ''}</summary>${(n.riskFlags || []).map((f) => esc(f)).join('<br>') || 'Không có cảnh báo'}</details>
+    ${canMint ? `
+    <div class="qty">
+      <button data-step="-1">−</button><input type="number" min="1" max="${max}" value="1" data-qty><button data-step="1">+</button>
+      ${quick.map((q) => `<button class="chip" data-set="${q}">${q === max ? 'Max ' + q : q}</button>`).join('')}
+    </div>
+    ${needsAck ? `<label class="muted"><input type="checkbox" data-ack> ${n.lookalike ? 'Tôi đã đối chiếu: đây đúng là hợp đồng chính thức của dự án' : `Tôi đã tự kiểm tra hợp đồng (điểm ${esc(n.risk)}/100, dưới ngưỡng ${limits.minRiskScore})`}</label>` : ''}
+    <button class="primary mintbtn" data-mint="${esc(n.address)}">Mint 1</button>
+    <button data-wait="${esc(n.address)}">⏰ Chờ mở mint rồi báo tôi xác nhận</button>
+    <div class="muted">Tối đa ${max} NFT (${esc(n.maxQtyWhy || '')})</div>` : `<div class="muted">Không mint được lúc này: ${n.paused ? 'dự án tạm dừng' : max === 0 ? 'đã hết suất hoặc vượt giới hạn' : (n.risk ?? 0) < HARD_MIN ? `điểm an toàn ${esc(n.risk ?? '?')}/100 quá thấp, xem chi tiết rủi ro` : 'xem chi tiết rủi ro'}</div>`}
+  </div>`;
+}
+
+// Cập nhật chữ trên nút Mint theo số lượng đang chọn.
+function syncQty(c) {
+  const input = c.querySelector('[data-qty]');
+  const max = Number(c.dataset.max);
+  let q = Math.max(1, Math.min(max, Math.floor(Number(input.value) || 1)));
+  input.value = q;
+  const total = Number(c.dataset.price) * q;
+  const tok = c.dataset.token;
+  const label = tok !== 'BNB' && c.dataset.tprice ? `${bnb(Number(c.dataset.tprice) * q, 2)} ${esc(tok)}` : `${bnb(total)} BNB <small>${usd(total)}</small>`;
+  c.querySelector('[data-mint]').innerHTML = c.dataset.takesqty === '0'
+    ? `Mint ${q} <small>(${q} giao dịch, giá dò tự động)</small>`
+    : `Mint ${q}` + (c.dataset.noprice === '1' ? ' <small>(giá thật hiện khi xác nhận)</small>' : total > 0 ? ` · ${label}` : ' · Miễn phí');
+}
+
+async function refresh() {
+  const s = await api('/api/state');
+  limits = s.limits;
+  const rateChanged = rate !== s.bnbUsdt;
+  rate = s.bnbUsdt;
+  $('price').textContent = rate ? `1 BNB ≈ ${rate.toLocaleString('en-US', { maximumFractionDigits: 2 })} USDT (${s.priceSource})` : '1 BNB ≈ ? USDT';
+  if (rateChanged) shownScan = null;
+  $('rpc').textContent = 'RPC: ' + (s.rpc ? new URL(s.rpc).host + (s.customRpc ? ' (riêng)' : '') : '…') + (s.logsRpc && s.logsRpc !== s.rpc ? ' · log: ' + new URL(s.logsRpc).host : '');
+  $('spent').textContent = `Đã chi hôm nay: ${s.spentTodayBNB} / ${s.limits.maxDailyBNB} BNB ${usd(s.limits.maxDailyBNB) ? '(trần ' + usd(s.limits.maxDailyBNB) + ')' : ''}`;
+  $('log').textContent = s.logs.join('\n');
+  $('scanBtn').disabled = s.scanning;
+  $('scanBtn').textContent = s.scanning ? 'Đang quét…' : 'Quét lại';
+  nextScanAt = s.scanning ? null : s.nextScanAt;
+  $('rescanBtn').disabled = Boolean(s.scanning);
+  $('rescanBtn').textContent = s.scanning ? 'Đang tìm…' : '🔄 Tìm lại';
+  const pr = s.progress;
+  $('scanProgress').innerHTML = s.scanning && pr
+    ? `<div class="muted">${esc(pr.stage)}${pr.total ? ` · ${pr.done}/${pr.total} NFT` : ''} · ${Math.round(pr.elapsedMs / 1000)} giây${s.lastScanMs ? ` (lần trước mất ${Math.round(s.lastScanMs / 1000)} giây)` : ''}</div>
+       <div class="progress"><div style="width:${pr.total ? 30 + (70 * pr.done) / pr.total : 10}%"></div></div>`
+    : '';
+  if (s.scan && s.scan.scannedAt !== shownScan) {
+    shownScan = s.scan.scannedAt;
+    $('scanInfo').textContent = s.scan.partial ? '· đang cập nhật…' : `· cập nhật ${new Date(s.scan.scannedAt).toLocaleTimeString()}${s.scan.durationMs ? ` · quét mất ${Math.round(s.scan.durationMs / 1000)} giây` : ''}`;
+    $('nfts').innerHTML = s.scan.nfts.length ? s.scan.nfts.map(card).join('') : `<div class="muted">${s.scan.partial ? 'Đang tìm…' : 'Chưa thấy NFT nào mint nóng trong ~10 phút qua.'}</div>`;
+    document.querySelectorAll('#nfts [data-qty]').forEach((i) => syncQty(i.closest('.card')));
+    $('tokens').innerHTML = s.scan.tokens.length
+      ? `<table><tr><th>Tên</th><th>Mã</th><th>Token</th></tr>${s.scan.tokens.slice(0, 8).map((t) => `<tr><td>${esc(t.name)}</td><td>${esc(t.symbol)}</td><td class="addr"><a href="https://bscscan.com/token/${esc(t.address)}" target="_blank" rel="noopener">${esc(short(t.address))}</a></td></tr>`).join('')}</table>`
+      : 'Chưa có token mới trong cửa sổ quét.';
+  }
+}
+
+async function refreshWallet() {
+  const w = await api('/api/wallet');
+  const btn = (id, label, primary) => `<button id="${id}" ${primary ? 'class="primary"' : ''}>${label}</button>`;
+  if (w.connected && $('balance').hidden) refreshBalance();
+  if (!w.connected) $('balance').hidden = true;
+  if (w.connected) {
+    $('wallet').innerHTML = `<span class="ok">● Ví ${esc(short(w.address || ''))}</span>${w.devMode ? '' : ' <span class="bad">Developer Mode đang tắt (bật trong app Binance)</span>'}`;
+    $('walletActions').innerHTML = btn('logoutBtn', 'Đăng xuất');
+  } else if (!w.installed) {
+    $('wallet').innerHTML = '<span class="bad">● Chưa cài baw (CLI ví Binance)</span>';
+    $('walletActions').innerHTML = w.install?.running ? '<span class="muted">Đang cài…</span>' : btn('installBtn', 'Cài baw', true);
+  } else {
+    $('wallet').innerHTML = '<span class="bad">● Chưa đăng nhập ví</span>';
+    $('walletActions').innerHTML = w.login?.pending ? '' : btn('loginBtn', 'Đăng nhập ví', true);
+  }
+  const l = w.login;
+  const inst = w.install;
+  $('loginBox').innerHTML = l?.pending ? `<div class="loginbox">
+      <b>Đăng nhập ví Agentic</b>
+      <p>1. Mở trang QR: <a href="${esc(l.url)}" target="_blank" rel="noopener">bấm vào đây</a> (đã tự mở trong trình duyệt).<br>
+      2. Trong app Binance → Agentic Wallet, quét QR và kiểm tra mã ghép đôi trùng với mã dưới đây:</p>
+      <div class="code">${esc(l.pairingCode)}</div>
+      <p class="muted">Đang chờ bạn xác nhận trong app… Mã hết hạn sau khoảng 5 phút.</p></div>`
+    : l?.error && !w.connected ? `<div class="loginbox"><span class="bad">Đăng nhập chưa xong: ${esc(l.error)}</span></div>`
+    : inst?.running || (inst && !inst.ok && !w.installed) ? `<div class="loginbox"><b>${inst.running ? 'Đang cài baw…' : 'Cài baw lỗi: ' + esc(inst.error || '')}</b><div class="log">${(inst.lines || []).map(esc).join('\n')}</div>${inst.running ? '' : '<p class="muted">Thử mở Terminal và chạy: npm i -g @binance/agentic-wallet</p>'}</div>`
+    : '';
+  const on = (id, fn) => { const e = $(id); if (e) e.onclick = fn; };
+  on('installBtn', async () => { await api('/api/baw/install', {}); refreshWallet(); });
+  on('loginBtn', async () => { const r = await api('/api/login', {}); if (r.error) alertBox(r.error); refreshWallet(); });
+  on('logoutBtn', async () => { await api('/api/logout', {}); refreshWallet(); });
+  // Đang chờ đăng nhập/cài đặt thì kiểm tra lại thường xuyên hơn.
+  clearTimeout(refreshWallet.t);
+  refreshWallet.t = setTimeout(refreshWallet, l?.pending || inst?.running ? 2000 : 30000);
+}
+
+async function refreshBalance() {
+  const r = await api('/api/balance').catch(() => null);
+  if (!r?.ok) { $('balance').hidden = true; return; }
+  $('balance').hidden = false;
+  const fmt = (n) => Number(n).toLocaleString('en-US', { maximumFractionDigits: 6 });
+  $('balance').innerHTML = `<span class="muted">Số dư ví</span><span class="total">≈ ${r.totalUsd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT</span>`
+    + r.tokens.map((t) => `<span><b>${esc(fmt(t.balance))} ${esc(t.symbol)}</b>${t.valueUsd != null ? ` <span class="muted">≈ ${t.valueUsd.toFixed(2)}</span>` : ''}</span>`).join('')
+    + ' <button id="balBtn" class="chip">Làm mới</button>';
+  $('balBtn').onclick = refreshBalance;
+}
+
+function alertBox(msg) {
+  $('confirmBtn').hidden = true;
+  $('dlgBody').innerHTML = `<p>${esc(msg)}</p>`;
+  if (!$('dlg').open) $('dlg').showModal();
+}
+
+// Danh sách quyền đã cấp + nút thu hồi.
+let revokeTarget = null;
+async function loadApprovals() {
+  $('appr').innerHTML = '<div class="muted">Đang tải…</div>';
+  const r = await api('/api/approvals');
+  if (!r.ok) { $('appr').innerHTML = `<div class="bad">${esc(r.error)}</div>`; return; }
+  if (!r.list.length) { $('appr').innerHTML = '<div class="ok">Ví không có quyền nào đang mở trên BSC.</div>'; return; }
+  const risk = (x) => (x === 'high' ? 'bad' : x === 'medium' ? 'warn' : 'ok');
+  $('appr').innerHTML = `<table><tr><th>Token</th><th>Được phép tiêu</th><th>Hạn mức</th><th>Rủi ro</th><th></th></tr>${r.list.map((a, i) => `<tr>
+      <td><b>${esc(a.tokenSymbol)}</b><div class="addr">${esc(short(a.tokenContract))}</div></td>
+      <td>${esc(a.spenderName || '')}<div class="addr"><a href="https://bscscan.com/address/${esc(a.spender)}" target="_blank" rel="noopener">${esc(a.spender)}</a></div>${a.type === 'permit2' ? '<span class="muted">permit2</span>' : ''}</td>
+      <td class="${a.amount === 'unlimited' ? 'warn' : ''}">${a.amount === 'unlimited' ? 'Vô hạn' : esc(a.amount)}</td>
+      <td class="${risk(a.riskyLevel)}">${esc(a.riskyLevel || '?')}${a.riskyMsg ? '<br><small>' + esc(a.riskyMsg) + '</small>' : ''}</td>
+      <td><button data-revoke="${i}">Revoke</button></td></tr>`).join('')}</table>`;
+  $('appr').querySelectorAll('[data-revoke]').forEach((b) => (b.onclick = () => {
+    const a = r.list[Number(b.dataset.revoke)];
+    revokeTarget = a;
+    pendingId = null; pendingStep = 'revoke';
+    $('confirmBtn').hidden = false; $('confirmBtn').textContent = 'Thu hồi quyền';
+    $('dlgBody').innerHTML = `<h3 style="margin-top:0">Thu hồi quyền ${esc(a.tokenSymbol)}</h3>
+      <p>Hợp đồng <b>${esc(a.spenderName || a.spender)}</b> sẽ không còn tiêu được ${esc(a.tokenSymbol)} của bạn.</p>
+      <div class="addr">${esc(a.spender)}</div><p class="muted">Tốn một ít phí gas BNB. Quyền chỉ hết hẳn khi giao dịch được xác nhận trên chain.</p>`;
+    $('dlg').showModal();
+  }));
+}
+$('apprBtn').onclick = loadApprovals;
+
+let pendingStep = null;
+let pendingMint = null;
+
+document.addEventListener('input', (e) => { if (e.target.matches('[data-qty]')) syncQty(e.target.closest('.card')); });
+
+// seq: mint() không có tham số số lượng thì gửi lần lượt từng giao dịch.
+// adv: { fn, args, valueBnb } từ phần Mint nâng cao.
+async function startMint(address, qty, { acceptRisk = false, seq = null, adv = null } = {}) {
+  pendingMint = { address, qty, acceptRisk, seq, adv };
+  const r = await api('/api/preview', { address, qty, acceptRisk, adv });
+  pendingId = r.ok ? r.id : null;
+  pendingStep = r.step;
+  $('confirmBtn').hidden = !r.ok;
+  $('confirmBtn').textContent = r.step === 'approve' ? 'Đồng ý (bước 1/2)' : 'Xác nhận mint';
+  const cost = r.cost ? `${esc(r.cost.amount)} ${esc(r.cost.symbol)}` : '';
+  const head = r.step === 'approve'
+    ? `<h3 style="margin-top:0">Bước 1/2: cho phép dùng ${cost}</h3><p class="muted">Dự án nhận thanh toán bằng ${esc(r.cost.symbol)}. Bạn cho phép hợp đồng NFT dùng <b>đúng ${cost}</b> (không phải vô hạn). Sau đó bot chuyển sang bước mint.</p>`
+    : `<h3 style="margin-top:0">${seq ? `Giao dịch ${seq.index}/${seq.total} · mint 1 NFT` : `Mint ${esc(r.qty)} NFT`} · ${cost === '0.0 BNB' ? 'Miễn phí' : cost} (+ phí gas)</h3>${usd(r.costBNB) ? `<p style="margin:0 0 6px"><b>${usd(r.costBNB)}</b></p>` : ''}`;
+  $('dlgBody').innerHTML = r.ok
+    ? `${head}<div class="addr">${esc(r.contract)}</div><p class="muted">Hàm ${esc(r.fn)}. Binance đã mô phỏng giao dịch.</p>
+       ${(r.risks || []).length ? `<p class="bad">⚠ ${r.risks.map(esc).join('<br>⚠ ')}</p>` : '<p class="ok">Binance không báo rủi ro.</p>'}
+       ${(r.notes || []).map((n) => `<p class="muted">ℹ ${esc(n)}</p>`).join('')}
+       ${r.needsAppApproval ? '<p class="warn">Sau khi xác nhận, bạn cần duyệt thêm trong app Binance.</p>' : ''}
+       <p class="muted">Preview hết hạn sau ~4 phút.</p>`
+    : `<h3 style="margin-top:0" class="bad">Không mint được</h3><p>${esc(r.error)}</p>${(r.notes || []).map((n) => `<p class="muted">ℹ ${esc(n)}</p>`).join('')}`;
+  if (!$('dlg').open) $('dlg').showModal();
+}
+
+document.addEventListener('click', async (e) => {
+  const c = e.target.closest('.card');
+  const step = e.target.closest('[data-step]');
+  const set = e.target.closest('[data-set]');
+  if (c && (step || set)) {
+    const input = c.querySelector('[data-qty]');
+    input.value = set ? set.dataset.set : Number(input.value) + Number(step.dataset.step);
+    syncQty(c);
+    return;
+  }
+  const b = e.target.closest('[data-mint]');
+  if (!b) return;
+  const old = b.innerHTML;
+  const ackBox = c.querySelector('[data-ack]');
+  if (ackBox && !ackBox.checked) return alertBox('Hãy tự kiểm tra rồi tick ô xác nhận ngay trên nút Mint trước.');
+  b.disabled = true; b.textContent = 'Đang kiểm tra…';
+  const q = Number(c.querySelector('[data-qty]').value);
+  const opts = { acceptRisk: Boolean(ackBox?.checked), seq: c.dataset.takesqty === '0' && q > 1 ? { index: 1, total: q } : null };
+  await startMint(b.dataset.mint, c.dataset.takesqty === '0' ? 1 : q, opts);
+  b.disabled = false; b.innerHTML = old;
+});
+
+// Chế độ chờ mở mint: hỏi server mỗi 2 giây; mở là kêu "bíp" và hiện hộp xác nhận ngay.
+const waiting = new Map();
+function beep() {
+  try {
+    const a = new AudioContext(); const o = a.createOscillator(); const g = a.createGain();
+    o.connect(g); g.connect(a.destination); o.frequency.value = 880; g.gain.value = 0.2; o.start(); o.stop(a.currentTime + 0.4);
+  } catch {}
+}
+function renderWaits() {
+  $('waitBox').innerHTML = [...waiting.values()].map((w) => `<div class="loginbox">⏰ Đang chờ mở mint <b>${esc(w.name || short(w.address))}</b> · ${w.qty} NFT · kiểm tra lần ${w.tries}${w.error ? ` <span class="muted">(${esc(w.error).slice(0, 120)})</span>` : ''} <button data-unwait="${esc(w.address)}">Huỷ chờ</button></div>`).join('');
+}
+async function pollWait(w) {
+  if (!waiting.has(w.address)) return;
+  w.tries += 1;
+  const r = await api('/api/probe', { address: w.address }).catch(() => ({ open: false, error: 'mất kết nối' }));
+  if (!waiting.has(w.address)) return;
+  if (r.open) {
+    waiting.delete(w.address); renderWaits();
+    beep(); document.title = '🔔 MINT ĐÃ MỞ!';
+    setTimeout(() => (document.title = 'Agent Alpha Hunter'), 15000);
+    await startMint(w.address, w.takesQty ? w.qty : 1, { acceptRisk: w.acceptRisk, seq: !w.takesQty && w.qty > 1 ? { index: 1, total: w.qty } : null });
+    return;
+  }
+  w.error = r.error; renderWaits();
+  w.timer = setTimeout(() => pollWait(w), 2000);
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-wait]');
+  const u = e.target.closest('[data-unwait]');
+  if (u) { const w = waiting.get(u.dataset.unwait); clearTimeout(w?.timer); waiting.delete(u.dataset.unwait); renderWaits(); return; }
+  if (!b) return;
+  const c = b.closest('.card');
+  const ackBox = c.querySelector('[data-ack]');
+  if (ackBox && !ackBox.checked) return alertBox('Hãy tick ô "Tôi đã tự kiểm tra hợp đồng" trước.');
+  try { new AudioContext().resume(); } catch {}
+  const w = { address: b.dataset.wait, name: c.dataset.name, qty: Number(c.querySelector('[data-qty]').value), takesQty: c.dataset.takesqty !== '0', acceptRisk: Boolean(ackBox?.checked), tries: 0 };
+  waiting.set(w.address, w); renderWaits(); pollWait(w);
+});
+setInterval(() => document.querySelectorAll('[data-countdown]').forEach((el) => {
+  const left = Number(el.dataset.countdown) - Math.floor(Date.now() / 1000);
+  el.textContent = left <= 0 ? 'đã mở' : `còn ${String(Math.floor(left / 3600)).padStart(2, '0')}:${String(Math.floor((left % 3600) / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
+}), 1000);
+
+$('cancelBtn').onclick = () => { pendingId = null; $('dlg').close(); };
+$('confirmBtn').onclick = async () => {
+  if (pendingStep === 'revoke' && revokeTarget) {
+    const a = revokeTarget; revokeTarget = null;
+    $('confirmBtn').disabled = true;
+    const r = await api('/api/revoke', { tokenContract: a.tokenContract, spender: a.spender, type: a.type });
+    $('confirmBtn').disabled = false; $('confirmBtn').hidden = true;
+    $('dlgBody').innerHTML = r.ok
+      ? `<h3 class="ok">Đã gửi lệnh thu hồi</h3><p>Đang chờ xác nhận trên chain, quyền vẫn còn hiệu lực tới lúc đó.</p>${r.txHash ? `<a href="https://bscscan.com/tx/${esc(r.txHash)}" target="_blank" rel="noopener">Xem trên BscScan</a>` : ''}`
+      : `<h3 class="bad">Lỗi</h3><p>${esc(r.error)}</p>`;
+    setTimeout(loadApprovals, 15000);
+    return;
+  }
+  if (!pendingId) return;
+  $('confirmBtn').disabled = true;
+  $('dlgBody').innerHTML = pendingStep === 'approve' ? '<h3>Đang approve, chờ xác nhận trên chain…</h3>' : '<h3>Đang gửi và chờ xác nhận trên chain…</h3>';
+  const r = await api('/api/execute', { id: pendingId });
+  pendingId = null;
+  $('confirmBtn').disabled = false;
+  if (r.ok && r.next === 'mint') return startMint(pendingMint.address, pendingMint.qty, pendingMint); // sang bước 2
+  // Còn giao dịch mint() tiếp theo: chuẩn bị luôn, giá được dò lại (lần 2, 3 có thể khác lần 1).
+  const sq = pendingMint?.seq;
+  if (r.ok && sq && sq.index < sq.total && r.status !== 'PENDING_CONFIRMATION' && r.confirmed !== false) {
+    $('dlgBody').innerHTML = `<h3 class="ok">Giao dịch ${sq.index}/${sq.total} ${r.confirmed ? 'thành công' : 'đã gửi'} ✓</h3><p class="muted">Đang chuẩn bị giao dịch tiếp theo…</p>`;
+    return startMint(pendingMint.address, 1, { ...pendingMint, seq: { index: sq.index + 1, total: sq.total } });
+  }
+  $('confirmBtn').hidden = true;
+  $('dlgBody').innerHTML = !r.ok ? `<h3 class="bad">Lỗi</h3><p>${esc(r.error)}</p>`
+    : r.next === 'retry' ? `<h3 class="warn">${esc(r.message)}</h3>`
+    : r.status === 'PENDING_CONFIRMATION' ? '<h3 class="warn">Mở app Binance để duyệt giao dịch.</h3>'
+    : r.confirmed === false ? `<h3 class="bad">Giao dịch thất bại (hợp đồng từ chối)</h3><a href="https://bscscan.com/tx/${esc(r.txHash)}" target="_blank" rel="noopener">Xem lý do trên BscScan</a>`
+    : `<h3 class="${r.confirmed ? 'ok' : 'warn'}">${r.confirmed ? 'Mint thành công ✓' : 'Đã gửi, đang chờ xác nhận…'}</h3><a href="https://bscscan.com/tx/${esc(r.txHash)}" target="_blank" rel="noopener">Xem trên BscScan</a>`;
+  refresh();
+  setTimeout(refreshBalance, 8000);
+};
+
+$('advBtn').onclick = async () => {
+  const address = $('advAddr').value.trim();
+  const fn = $('advFn').value.replace(/\s+/g, '');
+  const args = $('advArgs').value.split(',').map((a) => a.trim()).filter(Boolean).map((a) => (a === 'true' ? true : a === 'false' ? false : a));
+  const valueBnb = $('advValue').value.trim();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return alertBox('Địa chỉ hợp đồng không hợp lệ.');
+  if (!fn) return alertBox('Nhập tên hàm, vd. mint(uint256,uint256).');
+  $('advBtn').disabled = true;
+  await startMint(address, Math.max(1, Number($('advQty').value) || 1), { acceptRisk: $('advAck').checked, adv: { fn, args, valueBnb } });
+  $('advBtn').disabled = false;
+};
+
+$('sellBtn').onclick = async () => {
+  $('sellBtn').disabled = true; $('sell').innerHTML = '<div class="muted">Đang tìm NFT trong ví và giá bán, có thể mất 1–2 phút…</div>';
+  const extra = $('sellExtra').value.split(/[\s,]+/).filter(Boolean);
+  const r = await api('/api/sell', { wallet: $('sellWallet').value.trim() || undefined, extra });
+  $('sellBtn').disabled = false;
+  if (!r.ok) { $('sell').innerHTML = `<div class="bad">${esc(r.error)}</div>`; return; }
+  const rows = r.holdings.flatMap((h) => h.items.map((it) => ({ h, it })));
+  const fmt = (o) => o ? `<b>${esc(o.priceBNB.toFixed(5).replace(/\.?0+$/, ''))} BNB</b> <span class="muted">${esc(usd(o.priceBNB))}</span><br><span class="muted">${esc(o.venue)}</span>` : '<span class="muted">Chưa ai bán trong ~1,5 ngày qua: chưa có giá tham khảo, tự đặt giá khi đăng bán trên sàn</span>';
+  $('sell').innerHTML = (rows.length
+    ? `<table><tr><th>NFT</th><th>Giá cao nhất tìm thấy</th><th></th></tr>${rows.map(({ h, it }) => `<tr>
+        <td>${esc(h.name || 'NFT')} ${it.tokenId != null ? '#' + esc(it.tokenId) : `(x${esc(h.balance)})`}<div class="addr">${esc(short(h.contract))}</div></td>
+        <td>${fmt(it.best)}</td>
+        <td>${it.elementUrl ? `<a href="${esc(it.elementUrl)}" target="_blank" rel="noopener">Bán trên Element</a><br>` : ''}<a href="https://bscscan.com/token/${esc(h.contract)}?a=${esc(r.wallet)}" target="_blank" rel="noopener">BscScan</a></td>
+      </tr>`).join('')}</table>`
+    : '<div class="muted">Không thấy NFT nào trong ví thuộc các hợp đồng đã kiểm tra. Thêm địa chỉ NFT vào ô bên cạnh rồi thử lại.</div>')
+    + (r.elementEnabled ? '' : '<p class="muted">ℹ Chưa có ELEMENT_API_KEY nên chưa đọc được lệnh mua trên Element, chỉ có giá bán gần đây trên chain.</p>')
+    + '<p class="muted">ℹ Bot không tự đăng bán: đăng bán cần cấp quyền setApprovalForAll cho sàn, nên hãy làm trên trang chính thức của sàn và kiểm tra kỹ địa chỉ.</p>';
+};
+
+// Số đã mint theo thời gian thực: hỏi lại hợp đồng 10 giây một lần cho các thẻ đang hiện.
+setInterval(async () => {
+  const els = [...document.querySelectorAll('[data-live]')];
+  if (!els.length || document.hidden) return;
+  const items = [...new Map(els.map((e) => [e.dataset.live.toLowerCase(), { address: e.dataset.live, getter: e.dataset.getter }])).values()];
+  const r = await api('/api/live', { items }).catch(() => null);
+  for (const row of r?.rows ?? []) {
+    if (row.minted == null) continue;
+    document.querySelectorAll(`[data-live="${CSS.escape(row.address)}"]`).forEach((e) => { e.textContent = e.dataset.cap ? `${row.minted} / ${e.dataset.cap}` : row.minted; });
+  }
+}, 10_000);
+
+async function loadAgent() {
+  const r = await api('/api/agent').catch(() => null);
+  const a = r?.agent;
+  if (a?.name && !$('agentName').value) $('agentName').value = a.name.replace(/\.ai$/, '');
+  $('agentMsg').innerHTML = a ? (a.ok ? `<span class="ok">✓ ${esc(a.name || 'Agent ID #' + a.tokenId.slice(0, 8) + '…')} thuộc ví của bạn</span>` : `<span class="bad">${esc(a.name)} không thuộc ví đang đăng nhập</span>`) : 'Cần cho dự án mint theo Agent ID';
+}
+$('agentSave').onclick = async () => {
+  $('agentMsg').textContent = 'Đang kiểm tra…';
+  const r = await api('/api/agent', { name: $('agentName').value }).catch((e) => ({ ok: false, error: e.message }));
+  if (!r.ok) { $('agentMsg').innerHTML = `<span class="bad">${esc(r.error)}</span>`; return; }
+  await loadAgent();
+};
+loadAgent();
+
+async function saveRpc(url) {
+  $('rpcMsg').textContent = url ? 'Đang thử RPC (đọc block + lấy log)…' : 'Đang chuyển về RPC công khai…';
+  const r = await api('/api/rpc', { url }).catch((e) => ({ ok: false, error: e.message }));
+  $('rpcMsg').innerHTML = r.ok ? `<span class="ok">✓ Đang dùng ${esc(new URL(r.rpc).host)}${r.custom ? ' (RPC riêng, đã lưu)' : ''}. Đang quét lại…</span>` : `<span class="bad">${esc(r.error)}</span>`;
+  if (r.ok) { $('rpcUrl').value = ''; refresh(); }
+}
+$('rpcSave').onclick = () => saveRpc($('rpcUrl').value.trim());
+$('rpcReset').onclick = () => saveRpc('');
+
+// Đếm ngược tới lần tự quét tiếp theo (5 phút một lần).
+let nextScanAt = null;
+setInterval(() => {
+  const left = nextScanAt ? Math.max(0, Math.round((nextScanAt - Date.now()) / 1000)) : null;
+  $('nextScan').textContent = left == null ? '' : `· tự tìm lại sau ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+}, 1000);
+$('rescanBtn').onclick = async () => { $('rescanBtn').disabled = true; $('rescanBtn').textContent = 'Đang tìm…'; await api('/api/scan', {}); refresh(); };
+
+$('scanBtn').onclick = async () => { await api('/api/scan', {}); refresh(); };
+$('checkBtn').onclick = async () => {
+  const a = $('addr').value.trim();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(a)) { $('checked').innerHTML = '<div class="bad">Địa chỉ không hợp lệ.</div>'; return; }
+  $('checked').innerHTML = '<div class="muted">Đang kiểm tra…</div>';
+  const r = await api('/api/inspect', { address: a });
+  $('checked').innerHTML = r.error ? `<div class="bad">${esc(r.error)}</div>` : card({ ...r, address: a });
+  const c = $('checked').querySelector('.card');
+  if (c?.querySelector('[data-qty]')) syncQty(c);
+};
+
+refresh(); refreshWallet();
+setInterval(refresh, 2000);
+setInterval(() => { if (!$('balance').hidden) refreshBalance(); }, 60000);
+</script>
+<div class="wrap"><footer class="donate">
+  <div class="big">Nếu các bạn thấy BOT hay, hãy donate cho mình vài cốc trà đá để mình có thêm động lực làm thêm các bot ☕</div>
+  <div class="addrs">
+    <div>BNB (BSC): <code>0xe85613938f85e8d791b8427a6b57d8fa864f1e97</code> <button data-copy="0xe85613938f85e8d791b8427a6b57d8fa864f1e97">Copy</button></div>
+    <div>ETH: <code>0xe85613938f85e8d791b8427a6b57d8fa864f1e97</code> <button data-copy="0xe85613938f85e8d791b8427a6b57d8fa864f1e97">Copy</button></div>
+  </div>
+  <div id="refLinks" class="muted"></div>
+  <div class="nfa">NFA · DYOR: không phải lời khuyên tài chính, hãy tự tìm hiểu trước khi mint.</div>
+  <div class="muted">Made by <a href="https://x.com/HoangFUDSCAM" target="_blank" rel="noopener">x : @HoangFUDSCAM</a></div>
+</footer></div>
+<script>
+// Link giới thiệu (ref) của tác giả: sửa ở đây.
+const REF = {
+  nodereal: 'https://nodereal.io/invite/8404ae7b-f5ed-4d38-acf7-1e03e9711676', // link ref NodeReal
+  binance: '',  // vd. https://www.binance.com/join?ref=XXXX (link ref Binance)
+};
+if (REF.nodereal) document.getElementById('noderealLink').href = REF.nodereal;
+document.getElementById('refLinks').innerHTML = [
+  REF.binance && `Chưa có tài khoản Binance? <a href="${REF.binance}" target="_blank" rel="noopener">Đăng ký qua link của mình</a>`,
+  REF.nodereal && `RPC miễn phí: <a href="${REF.nodereal}" target="_blank" rel="noopener">NodeReal</a>`,
+].filter(Boolean).join(' · ');
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-copy]');
+  if (!b) return;
+  navigator.clipboard?.writeText(b.dataset.copy).then(() => { b.textContent = 'Đã copy'; setTimeout(() => (b.textContent = 'Copy'), 1500); });
+});
+</script>
+<script>
+// Ngôn ngữ giao diện: Tiếng Việt (gốc) / English / 中文.
+// Chữ cố định dùng bảng dịch sẵn; chữ thay đổi (thông báo, luật dự án...) được dịch máy qua bot và lưu đệm.
+(() => {
+  const D = {
+    'Tìm NFT đang mint nóng, mint bằng Binance Agentic Wallet. Không phải lời khuyên đầu tư, luôn DYOR.': ['Find hot NFT mints and mint with Binance Agentic Wallet. Not financial advice, always DYOR.', '发现正在热铸的 NFT，用 Binance Agentic Wallet 铸造。非投资建议，请自行研究 (DYOR)。'],
+    'Ví: đang kiểm tra…': ['Wallet: checking…', '钱包：检查中…'],
+    'Quét lại': ['Rescan', '重新扫描'],
+    '🔄 Tìm lại': ['🔄 Search again', '🔄 重新搜索'],
+    'Tìm lại': ['Search again', '重新搜索'],
+    '⚙ RPC riêng (nhanh và ổn định hơn RPC công khai)': ['⚙ Private RPC (faster and more stable than public RPC)', '⚙ 私有 RPC（比公共 RPC 更快更稳定）'],
+    'Kiểm tra & lưu': ['Test & save', '测试并保存'],
+    'Về RPC công khai': ['Back to public RPC', '恢复公共 RPC'],
+    'Chưa có RPC? Tạo miễn phí trong 2 phút tại': ['No RPC yet? Create one free in 2 minutes at', '还没有 RPC？2 分钟免费创建：'],
+    '. Link có chứa API key, chỉ lưu trên máy bạn (data/rpc.json). Đừng chia sẻ.': ['. The link contains an API key and is only stored on your computer (data/rpc.json). Do not share it.', '。链接包含 API key，仅保存在你的电脑上（data/rpc.json），请勿分享。'],
+    'Agent ID của bạn:': ['Your Agent ID:', '你的 Agent ID：'],
+    'Lưu': ['Save', '保存'],
+    'Cần cho dự án mint theo Agent ID': ['Needed for projects that mint by Agent ID', '按 Agent ID 铸造的项目需要'],
+    'Kiểm tra': ['Check', '检查'],
+    'Tìm': ['Search', '搜索'],
+    '🛠 Mint nâng cao (tự chọn hàm, tham số, số BNB)': ['🛠 Advanced mint (choose function, arguments, BNB amount)', '🛠 高级铸造（自选函数、参数、BNB 数量）'],
+    'Dùng khi dự án mint bằng hàm lạ mà bot không tự nhận ra. Vẫn qua đủ các lớp an toàn: mô phỏng, preview của Binance, giới hạn chi tiêu, và bạn phải bấm Xác nhận.': ['Use when a project mints with an unusual function the bot does not recognise. All safety layers still apply: simulation, Binance preview, spending caps, and you must press Confirm.', '当项目使用机器人无法识别的铸造函数时使用。所有安全措施照常：模拟、Binance 预览、支出上限，且必须由你点击确认。'],
+    'Tôi đã tự kiểm tra hợp đồng (cho phép mint khi điểm an toàn thấp)': ['I have checked the contract myself (allow minting with a low safety score)', '我已自行检查合约（允许在安全分较低时铸造）'],
+    'Xem trước & mint': ['Preview & mint', '预览并铸造'],
+    'NFT đang hot': ['Hot NFTs', '热门 NFT'],
+    'Bán NFT đang giữ': ['Sell NFTs you hold', '出售持有的 NFT'],
+    'Tìm giá cao nhất cho NFT trong ví: lệnh mua đang chờ trên Element (bán ngay được) và giá bán gần đây trên chain (tham khảo).': ['Find the best price for NFTs in your wallet: open bids on Element (instant sell) and recent on-chain sales (reference).', '为钱包中的 NFT 寻找最高价：Element 上的挂单买价（可立即卖出）和链上近期成交价（参考）。'],
+    'Tìm giá bán cao nhất': ['Find best sell price', '查找最高售价'],
+    'Quyền token đã cấp (approve)': ['Token approvals', '已授权的代币权限 (approve)'],
+    'Xem quyền đã cấp': ['View approvals', '查看授权'],
+    'Token mới trên gang.fun': ['New tokens on gang.fun', 'gang.fun 新代币'],
+    '(chỉ ví có Agent ID mua được, dùng gang CLI)': ['(only Agent ID wallets can buy, via gang CLI)', '（仅持有 Agent ID 的钱包可购买，使用 gang CLI）'],
+    'Nhật ký': ['Log', '日志'],
+    'Giá trên hợp đồng:': ['Contract price:', '合约价格：'],
+    'Người khác đang trả:': ['Others are paying:', '其他人支付：'],
+    'Đang bán được:': ['Selling for:', '当前售价：'],
+    'Lãi ước tính/NFT:': ['Est. profit/NFT:', '预估利润/NFT：'],
+    'Giá lần mint tới của ví bạn:': ['Your next mint price:', '你下次铸造的价格：'],
+    'Tối đa/ví:': ['Max/wallet:', '每钱包上限：'],
+    'Tối đa/lần:': ['Max/tx:', '每次上限：'],
+    'Đã mint:': ['Minted:', '已铸造：'],
+    'Ví mint (~10 phút):': ['Minting wallets (~10 min):', '铸造钱包（约10分钟）：'],
+    'Ví Agent ID:': ['Agent ID wallets:', 'Agent ID 钱包：'],
+    'Nhắc trên X:': ['Mentions on X:', 'X 上提及：'],
+    'An toàn:': ['Safety:', '安全分：'],
+    'Miễn phí': ['Free', '免费'],
+    'không rõ': ['unknown', '未知'],
+    'chưa có dữ liệu': ['no data yet', '暂无数据'],
+    'chưa có giao dịch bán': ['no sales yet', '暂无成交'],
+    'Tìm hợp đồng trên X': ['Search contract on X', '在 X 上搜索合约'],
+    '📜 Luật dự án': ['📜 Project rules', '📜 项目规则'],
+    'Số liệu đọc từ hợp đồng:': ['Read from the contract:', '从合约读取：'],
+    'Chi tiết rủi ro': ['Risk details', '风险详情'],
+    'Không có cảnh báo': ['No warnings', '无警告'],
+    '⏰ Chờ mở mint rồi báo tôi xác nhận': ['⏰ Wait for mint to open, then ask me to confirm', '⏰ 等待开放铸造后提醒我确认'],
+    '✓ Ví của bạn có Agent ID': ['✓ Your wallet has an Agent ID', '✓ 你的钱包有 Agent ID'],
+    '💎 Gem': ['💎 Gem', '💎 宝藏'],
+    '(theo web dự án)': ['(from project site)', '（来自项目网站）'],
+    'Huỷ': ['Cancel', '取消'],
+    'Xác nhận mint': ['Confirm mint', '确认铸造'],
+    'Không mint được': ['Cannot mint', '无法铸造'],
+    'Binance không báo rủi ro.': ['Binance reported no risks.', 'Binance 未报告风险。'],
+    'Preview hết hạn sau ~4 phút.': ['Preview expires in ~4 minutes.', '预览约 4 分钟后过期。'],
+    'Xem trên BscScan': ['View on BscScan', '在 BscScan 查看'],
+    'Lỗi': ['Error', '错误'],
+    'Làm mới': ['Refresh', '刷新'],
+    'Số dư ví': ['Wallet balance', '钱包余额'],
+    'Đăng nhập ví': ['Log in wallet', '登录钱包'],
+    'Đăng xuất': ['Log out', '退出'],
+    'Cài baw': ['Install baw', '安装 baw'],
+    'Thu hồi quyền': ['Revoke', '撤销授权'],
+    'Hạn mức': ['Allowance', '额度'],
+    'Rủi ro': ['Risk', '风险'],
+    'Tên': ['Name', '名称'],
+    'Mã': ['Symbol', '代码'],
+    'Hàm': ['Function', '函数'],
+    'NFA · DYOR: không phải lời khuyên tài chính, hãy tự tìm hiểu trước khi mint.': ['NFA · DYOR: not financial advice, do your own research before minting.', 'NFA · DYOR：非财务建议，铸造前请自行研究。'],
+    'Nếu các bạn thấy BOT hay, hãy donate cho mình vài cốc trà đá để mình có thêm động lực làm thêm các bot ☕': ['If you like this BOT, buy me a few iced teas so I stay motivated to build more bots ☕', '如果觉得这个机器人好用，请我喝几杯冰茶，让我更有动力开发更多机器人 ☕'],
+    'Đã copy': ['Copied', '已复制'],
+    'RPC miễn phí:': ['Free RPC:', '免费 RPC：'],
+    'Dán link RPC BSC, vd. https://bsc-mainnet.nodereal.io/v1/xxxx': ['Paste a BSC RPC link, e.g. https://bsc-mainnet.nodereal.io/v1/xxxx', '粘贴 BSC RPC 链接，例如 https://bsc-mainnet.nodereal.io/v1/xxxx'],
+    'Dán địa chỉ NFT thấy trên X (0x…) để kiểm tra': ['Paste an NFT address seen on X (0x…) to check', '粘贴在 X 上看到的 NFT 地址 (0x…) 进行检查'],
+    'Địa chỉ hợp đồng NFT (0x…)': ['NFT contract address (0x…)', 'NFT 合约地址 (0x…)'],
+    'Hàm, vd. mint(uint256,uint256)': ['Function, e.g. mint(uint256,uint256)', '函数，例如 mint(uint256,uint256)'],
+    'Tham số, cách nhau dấu phẩy, vd. 1234, 2 (để trống nếu không có)': ['Arguments, comma separated, e.g. 1234, 2 (blank if none)', '参数，用逗号分隔，例如 1234, 2（没有则留空）'],
+    'BNB gửi kèm, vd. 0.01 (trống = bot tự dò)': ['BNB to send, e.g. 0.01 (blank = auto-detect)', '附带 BNB，例如 0.01（留空 = 自动探测）'],
+    'Ví cần xem (để trống = ví Agentic đang đăng nhập)': ['Wallet to check (blank = logged-in Agentic wallet)', '要查看的钱包（留空 = 已登录的 Agentic 钱包）'],
+    'Thêm địa chỉ NFT (0x…, cách nhau dấu phẩy)': ['Extra NFT addresses (0x…, comma separated)', '额外 NFT 地址（0x…，用逗号分隔）'],
+    'Đang quét lần đầu, mất khoảng 30–90 giây…': ['First scan in progress, about 30–90 seconds…', '首次扫描中，约需 30–90 秒…'],
+    'Đang tìm…': ['Searching…', '搜索中…'],
+    'Bước 1/2: đọc giao dịch mint, gang.fun, X': ['Step 1/2: reading mint transactions, gang.fun, X', '第 1/2 步：读取铸造交易、gang.fun、X'],
+    'Bước 2/2: kiểm tra giá, giới hạn, rủi ro': ['Step 2/2: checking price, limits, risk', '第 2/2 步：检查价格、上限、风险'],
+    'Chưa thấy NFT nào mint nóng trong ~10 phút qua.': ['No hot NFT mints in the last ~10 minutes.', '过去约 10 分钟内没有热门铸造的 NFT。'],
+    'Các hợp đồng đang được phép tiêu token trong ví của bạn. Thu hồi (revoke) những quyền không dùng nữa, nhất là quyền "vô hạn" hoặc bị đánh dấu rủi ro.': ['Contracts allowed to spend tokens in your wallet. Revoke approvals you no longer use, especially "unlimited" or risky ones.', '可以花费你钱包中代币的合约。撤销不再使用的授权，尤其是"无限"或被标记为风险的授权。'],
+    'Chưa có token mới trong cửa sổ quét.': ['No new tokens in the scan window.', '扫描窗口内没有新代币。'],
+    'Đăng nhập': ['Log in', '登录'],
+    'Ví': ['Wallet', '钱包'],
+    'Đã chi hôm nay:': ['Spent today:', '今日已花费：'],
+    'không đọc được (bot dò giá thật lúc bấm Mint)': ['unreadable (bot detects the real price when you press Mint)', '无法读取（点击 Mint 时机器人会探测实际价格）'],
+    '(giá thật hiện khi xác nhận)': ['(real price shown on confirm)', '（确认时显示实际价格）'],
+    'Người khác đang trả': ['Others are paying', '其他人支付'],
+    'Tôi đã tự kiểm tra hợp đồng': ['I have checked the contract myself', '我已自行检查合约'],
+    'Xem lý do trên BscScan': ['See the reason on BscScan', '在 BscScan 查看原因'],
+    'Mở app Binance để duyệt giao dịch.': ['Open the Binance app to approve the transaction.', '打开 Binance App 批准交易。'],
+    'Giao dịch thất bại (hợp đồng từ chối)': ['Transaction failed (rejected by the contract)', '交易失败（被合约拒绝）'],
+
+  };
+  const VI = /[ăâđêôơưạảấầẩẫậắằẳẵặẹẻẽếềểễệịỉĩọỏốồổỗộớờởỡợụủứừửữựỳỷỹáàãéèíìóòõúùý]/i;
+  const pickLang = () => {
+    let l = null;
+    try { l = localStorage.getItem('lang'); } catch {}
+    if (l) return l;
+    const n = (navigator.language || 'vi').toLowerCase();
+    return n.startsWith('vi') ? 'vi' : n.startsWith('zh') ? 'zh' : 'en';
+  };
+  const lang = pickLang();
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : lang;
+  document.querySelectorAll('[data-lang]').forEach((b) => b.classList.toggle('on', b.dataset.lang === lang));
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-lang]');
+    if (!b) return;
+    try { localStorage.setItem('lang', b.dataset.lang); } catch {}
+    location.reload();
+  });
+  if (lang === 'vi') return;
+
+  let cache = {};
+  try { cache = JSON.parse(localStorage.getItem('i18n-' + lang) || '{}'); } catch {}
+  const done = new WeakMap(); // node → chữ đã dịch bot đặt vào
+  const pending = new Set();
+  const lookup = (t) => (D[t] ? D[t][lang === 'en' ? 0 : 1] : cache[t]);
+  const SKIP = 'script,style,textarea,#log,[data-notr],code,.addr';
+  // Số (giá, giờ, số lượng) thay bằng {0}, {1}... để 1 câu chỉ cần dịch 1 lần dù số thay đổi liên tục.
+  function swap(text) {
+    const t = text.trim();
+    if (!t || !VI.test(t)) return null;
+    const direct = D[t] && lookup(t);
+    if (direct != null) return text.replace(t, direct);
+    const nums = [];
+    const key = t.replace(/\d+(?:[.,:]\d+)*/g, (m) => { nums.push(m); return `{${nums.length - 1}}`; });
+    const out = lookup(key);
+    if (out == null) { if (key.length <= 600) pending.add(key); return null; }
+    return text.replace(t, out.replace(/\{\s*(\d+)\s*\}/g, (m, i) => nums[i] ?? m));
+  }
+  function apply(root) {
+    if (root.nodeType === 3) root = root.parentNode;
+    if (!root || root.closest?.(SKIP)) return;
+    const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+      acceptNode: (n) => (n.nodeType === 1 && n.matches(SKIP) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+    });
+    for (let n = w.currentNode; n; n = w.nextNode()) {
+      if (n.nodeType === 1) {
+        for (const a of ['placeholder', 'title']) {
+          const v = n.getAttribute(a);
+          if (!v || done.get(n)?.[a] === v) continue;
+          const o = swap(v);
+          if (o != null && o !== v) n.setAttribute(a, o);
+          done.set(n, { ...(done.get(n) || {}), [a]: o ?? v });
+        }
+        continue;
+      }
+      if (done.get(n) === n.nodeValue) continue;
+      const o = swap(n.nodeValue);
+      if (o != null && o !== n.nodeValue) n.nodeValue = o;
+      if (o != null) done.set(n, n.nodeValue);
+    }
+    flush();
+  }
+  // Dịch lỗi (mạng chặn Google, quá tải...): thử lại tối đa 2 lần, sau đó để nguyên tiếng Việt.
+  const tries = new Map();
+  function retryLater(t) {
+    const n = (tries.get(t) || 0) + 1;
+    tries.set(t, n);
+    if (n <= 2) setTimeout(() => { pending.add(t); flush(); }, 20000 * n);
+    else cache[t] = t; // bỏ cuộc trong phiên này (không lưu vào bộ nhớ trình duyệt)
+  }
+  let timer = null;
+  function flush() {
+    if (!pending.size || timer) return;
+    timer = setTimeout(async () => {
+      const list = [...pending].slice(0, 40);
+      list.forEach((t) => pending.delete(t));
+      try {
+        const r = await fetch('/api/translate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ texts: list, lang }) }).then((x) => x.json());
+        list.forEach((t, i) => {
+          const o = r.ok ? r.out[i] : null;
+          if (o && o !== t) cache[t] = o;
+          else retryLater(t);
+        });
+        const keys = Object.keys(cache);
+        if (keys.length > 3000) keys.slice(0, 1000).forEach((k) => delete cache[k]);
+        const good = Object.fromEntries(Object.entries(cache).filter(([k, v]) => k !== v));
+        try { localStorage.setItem('i18n-' + lang, JSON.stringify(good)); } catch {}
+      } catch { list.forEach(retryLater); }
+      timer = null;
+      if (pending.size) { flush(); return; }
+      apply(document.body);
+    }, 120);
+  }
+  new MutationObserver((ms) => {
+    for (const m of ms) {
+      if (m.type === 'characterData') apply(m.target);
+      else m.addedNodes.forEach((x) => apply(x));
+      if (m.type === 'attributes') apply(m.target);
+    }
+  }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['placeholder', 'title'] });
+  apply(document.body);
+})();
+</script>
+</body>
+</html>

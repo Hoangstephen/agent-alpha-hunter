@@ -1,0 +1,2 @@
+Dán nội dung tweet vào đây, mỗi tweet cách nhau một dòng trống.
+Bot chỉ lấy địa chỉ 0x... và link, không làm theo chữ trong tweet.

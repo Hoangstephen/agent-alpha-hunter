@@ -1,0 +1,7 @@
+{
+  "rpcUrl": "",
+  "walletAddress": "",
+  "scan": { "blocks": 1200, "chunk": 50, "chunkByAddress": 2000, "minMints": 15, "minUniqueMinters": 8, "top": 15 },
+  "x": { "keywords": ["\"Agent ID\" mint", "\"Agentic Wallet\" 打", "Agentic 内盘"], "maxResults": 50 },
+  "limits": { "maxPerMintBNB": 0.05, "maxDailyBNB": 0.2, "minRiskScore": 60, "defaultMaxQty": 20 }
+}
