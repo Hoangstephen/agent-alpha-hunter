@@ -15,6 +15,7 @@
   .muted { color:var(--muted); } .box { border:2px solid var(--accent); border-radius:12px; padding:16px; text-align:center; background:var(--card); }
   .big { font-size:22px; font-weight:700; color:var(--accent); } .nfa { font-size:18px; font-weight:700; margin-top:10px; }
   @media (max-width:600px) { table { font-size:13px; } }
+  pre { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:10px; overflow-x:auto; } pre code { border:0; padding:0; word-break:normal; }
 </style>
 </head>
 <body><main>
@@ -34,6 +35,7 @@
   <li><b>🔥 Hot</b> (0–100) là mức độ được quan tâm (số ví mint, tỉ lệ ví Agent ID, nhắc trên X), không phải điểm an toàn. <b>💎 Gem</b> là dự án dành cho ví Agent ID, mint chậm nên ít người biết.</li>
   <li><b>Cảnh báo hàng nhái:</b> 2 hợp đồng trùng tên thì cái ít người mint hơn bị gắn cảnh báo đỏ.</li>
   <li><b>Tự học cách mint:</b> hợp đồng có hàm mint lạ thì bot chép cách mint từ giao dịch thành công của người khác (thay ví và Agent ID bằng của bạn), vẫn phải bạn xác nhận.</li>
+  <li><b>Chạy trên VPS + báo Telegram:</b> chế độ terminal không cần giao diện (xem mục bên dưới).</li>
   <li><b>Giao diện 3 ngôn ngữ:</b> nút VI / EN / 中文 ở góc trên.</li>
 </ul>
 
@@ -81,6 +83,27 @@
 </table>
 <p>Hợp đồng có hàm <code>mint()</code> mỗi lần ra 1 NFT (như Xuanwu Sigil): chọn 3 thì bot gửi 3 giao dịch lần lượt, mỗi giao dịch bạn xác nhận riêng. Giá từng lần được dò tự động, vì lần đầu có thể miễn phí.</p>
 <p>Bot không tự đăng bán NFT. Đăng bán cần cấp quyền <code>setApprovalForAll</code> cho sàn, nên hãy làm trên trang chính thức của sàn (ví dụ Element).</p>
+
+<h2>Chạy trên VPS (terminal) và báo về Telegram</h2>
+<p>Dùng khi muốn bot săn 24/7 trên VPS Linux không có giao diện. Ở chế độ này bot <b>chỉ quét và báo</b> NFT hot / 💎 hidden gem về Telegram, <b>không mint</b>; thấy kèo thì bạn mint trên máy tính bằng giao diện web như bình thường.</p>
+<ol>
+  <li><b>Tạo bot Telegram:</b> nhắn <code>@BotFather</code> → <code>/newbot</code> → đặt tên → nhận <b>token</b> dạng <code>123456:ABC...</code>. Mở bot vừa tạo và nhắn cho nó 1 chữ bất kỳ (muốn báo vào nhóm thì thêm bot vào nhóm và nhắn trong nhóm).</li>
+  <li><b>Cài trên VPS (Ubuntu/Debian):</b>
+<pre><code>curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs git
+git clone https://github.com/Hoangstephen/agent-alpha-hunter
+cd agent-alpha-hunter &amp;&amp; npm install</code></pre></li>
+  <li><b>Kết nối Telegram</b> (tự lấy chat id và gửi tin thử): <code>node src/index.js telegram-setup --token 123456:ABC...</code></li>
+  <li><b>RPC riêng (nên có):</b> <code>mkdir -p data &amp;&amp; echo '{"url":"https://bsc-mainnet.nodereal.io/v1/KEY_CUA_BAN"}' &gt; data/rpc.json</code></li>
+  <li><b>Chạy thử:</b> <code>npm run vps</code> (quét mỗi 5 phút; đổi bằng <code>node src/index.js vps --every 3</code>). Ctrl+C để dừng.</li>
+  <li><b>Chạy nền 24/7:</b>
+<pre><code>sudo npm i -g pm2
+pm2 start src/index.js --name alpha -- vps --every 5
+pm2 save &amp;&amp; pm2 startup     # tự chạy lại khi VPS khởi động
+pm2 logs alpha              # xem nhật ký</code></pre></li>
+</ol>
+<p>Tuỳ chỉnh trong <code>data/telegram.json</code>: <code>minHot</code> (mặc định 50: chỉ báo NFT có điểm Hot từ 50, Gem luôn báo), <code>lang</code> (<code>vi</code> / <code>en</code> / <code>zh</code>), <code>repeatHours</code> (mặc định 6: cùng NFT không báo lại trong 6 giờ). Bot bỏ qua NFT có điểm an toàn dưới 40 và ghi rõ cảnh báo hàng nhái. Giao diện web trên máy tính cũng tự báo Telegram nếu đã chạy <code>telegram-setup</code>.</p>
+<p>Token bot Telegram nằm trong <code>data/telegram.json</code>: không chia sẻ, không đưa lên GitHub (thư mục <code>data</code> đã được loại khỏi git).</p>
 
 <h2>An toàn và giới hạn</h2>
 <ul>

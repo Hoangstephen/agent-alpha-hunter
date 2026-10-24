@@ -17,6 +17,7 @@ import { Ledger } from './ledger.js';
 import { bnbUsdt } from './price.js';
 import { sellReport } from './sell.js';
 import { webRules, projectPage, translateTo } from './rules.js';
+import { notifyScan } from './telegram.js';
 import { watchList, watchAdd } from './watch.js';
 import { resolveAgentId, saveAgentName, labelOf, validLabel } from './agentid.js';
 import { isAddress } from 'ethers';
@@ -94,6 +95,7 @@ async function runScan() {
     state.scan = await scanAll(state.provider, cfg, log, { walletAddr: w.connected ? w.address : undefined, bnbUsdt: state.price?.price, onProgress });
     state.lastScanMs = state.scan.durationMs;
     log(`[scan] xong: ${state.scan.nfts.length} NFT, ${state.scan.tokens.length} token gang.fun`);
+    notifyScan(state.scan, cfg, log).catch((e) => log(`[telegram] ${e.message}`));
   } catch (e) {
     log(`[scan] lỗi: ${e.message}`);
   } finally {

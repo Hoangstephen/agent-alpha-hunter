@@ -15,6 +15,7 @@
   .muted { color:var(--muted); } .box { border:2px solid var(--accent); border-radius:12px; padding:16px; text-align:center; background:var(--card); }
   .big { font-size:22px; font-weight:700; color:var(--accent); } .nfa { font-size:18px; font-weight:700; margin-top:10px; }
   @media (max-width:600px) { table { font-size:13px; } }
+  pre { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:10px; overflow-x:auto; } pre code { border:0; padding:0; word-break:normal; }
 </style>
 </head>
 <body><main>
@@ -32,6 +33,7 @@
   <li><b>🔥 Hot</b> (0–100) shows how much attention a project gets (minting wallets, Agent ID ratio, mentions on X). It is not a safety score. <b>💎 Gem</b> marks Agent-ID-only projects that mint slowly and few people know about yet.</li>
   <li><b>Lookalike warning:</b> when two contracts share a name, the one with fewer mints gets a red "possible fake" warning.</li>
   <li><b>Learns how to mint:</b> if a contract uses an unusual mint function, the bot copies the call from someone else's successful mint (swapping in your wallet and Agent ID). You still confirm every mint.</li>
+  <li><b>VPS mode + Telegram alerts:</b> headless terminal mode (see below).</li>
   <li><b>3 languages:</b> VI / EN / 中文 buttons at the top right.</li>
 </ul>
 
@@ -78,6 +80,27 @@
 </table>
 <p>Contracts whose <code>mint()</code> gives 1 NFT per call: choose 3 and the bot sends 3 transactions one after another, each confirmed separately. The price is probed each time because the first mint may be free.</p>
 <p>The bot never lists NFTs for sale. Listing needs <code>setApprovalForAll</code> for the marketplace, so do it on the marketplace's official site (for example Element).</p>
+
+<h2>Run on a VPS (terminal) with Telegram alerts</h2>
+<p>For 24/7 hunting on a Linux VPS with no GUI. In this mode the bot <b>only scans and alerts</b> hot NFTs / 💎 hidden gems to Telegram and <b>never mints</b>; when you see a good one, mint it on your computer with the web interface as usual.</p>
+<ol>
+  <li><b>Create a Telegram bot:</b> message <code>@BotFather</code> → <code>/newbot</code> → pick a name → copy the <b>token</b> (<code>123456:ABC...</code>). Open your new bot and send it any message (for a group, add the bot to the group and send a message there).</li>
+  <li><b>Install on the VPS (Ubuntu/Debian):</b>
+<pre><code>curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs git
+git clone https://github.com/Hoangstephen/agent-alpha-hunter
+cd agent-alpha-hunter &amp;&amp; npm install</code></pre></li>
+  <li><b>Connect Telegram</b> (finds your chat id and sends a test message): <code>node src/index.js telegram-setup --token 123456:ABC...</code></li>
+  <li><b>Private RPC (recommended):</b> <code>mkdir -p data &amp;&amp; echo '{"url":"https://bsc-mainnet.nodereal.io/v1/YOUR_KEY"}' &gt; data/rpc.json</code></li>
+  <li><b>Test run:</b> <code>npm run vps</code> (scans every 5 minutes; change with <code>node src/index.js vps --every 3</code>). Ctrl+C to stop.</li>
+  <li><b>Run 24/7 in the background:</b>
+<pre><code>sudo npm i -g pm2
+pm2 start src/index.js --name alpha -- vps --every 5
+pm2 save &amp;&amp; pm2 startup     # restart automatically after a reboot
+pm2 logs alpha              # view logs</code></pre></li>
+</ol>
+<p>Options in <code>data/telegram.json</code>: <code>minHot</code> (default 50: only alert NFTs with a Hot score of 50+, Gems always alert), <code>lang</code> (<code>vi</code> / <code>en</code> / <code>zh</code>), <code>repeatHours</code> (default 6: the same NFT is not re-alerted within 6 hours). NFTs with a safety score below 40 are skipped and possible fakes are clearly flagged. The web interface on your computer also sends Telegram alerts once <code>telegram-setup</code> has been run.</p>
+<p>The Telegram bot token is stored in <code>data/telegram.json</code>: do not share it or upload it to GitHub (the <code>data</code> folder is excluded from git).</p>
 
 <h2>Safety and limits</h2>
 <ul>

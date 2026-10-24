@@ -15,6 +15,7 @@
   .muted { color:var(--muted); } .box { border:2px solid var(--accent); border-radius:12px; padding:16px; text-align:center; background:var(--card); }
   .big { font-size:22px; font-weight:700; color:var(--accent); } .nfa { font-size:18px; font-weight:700; margin-top:10px; }
   @media (max-width:600px) { table { font-size:13px; } }
+  pre { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:10px; overflow-x:auto; } pre code { border:0; padding:0; word-break:normal; }
 </style>
 </head>
 <body><main>
@@ -32,6 +33,7 @@
   <li><b>🔥 Hot</b>（0–100）表示项目热度（铸造钱包数、Agent ID 比例、X 提及），不是安全分。<b>💎 宝藏</b>表示仅限 Agent ID、铸造较慢、知道的人还不多的项目。</li>
   <li><b>仿冒提醒：</b>两个合约同名时，铸造较少的那个会显示红色"可能是仿冒"警告。</li>
   <li><b>自动学习铸造方式：</b>合约使用特殊铸造函数时，机器人会复制他人成功铸造的调用（替换成你的钱包和 Agent ID）。每次铸造仍需你确认。</li>
+  <li><b>VPS 模式 + Telegram 提醒：</b>无界面终端模式（见下文）。</li>
   <li><b>三种语言：</b>右上角 VI / EN / 中文 按钮。</li>
 </ul>
 
@@ -78,6 +80,27 @@
 </table>
 <p>如果合约的 <code>mint()</code> 每次只铸造 1 个 NFT：选择 3 个时，机器人会依次发送 3 笔交易，每笔单独确认。每次都会自动探测价格，因为第一次可能免费。</p>
 <p>机器人不会挂单出售 NFT。挂单需要给交易市场 <code>setApprovalForAll</code> 授权，请在交易市场官网（例如 Element）操作。</p>
+
+<h2>在 VPS（终端）运行并推送到 Telegram</h2>
+<p>适合在无图形界面的 Linux VPS 上 24/7 运行。此模式下机器人<b>只扫描并提醒</b>热门 NFT / 💎 宝藏项目到 Telegram，<b>不会铸造</b>；看到合适的项目后，请在电脑上用网页界面照常铸造。</p>
+<ol>
+  <li><b>创建 Telegram 机器人：</b>给 <code>@BotFather</code> 发送 <code>/newbot</code> → 取名 → 复制 <b>token</b>（<code>123456:ABC...</code>）。打开新机器人并随便发一条消息（如需推送到群组，把机器人拉进群并在群里发消息）。</li>
+  <li><b>在 VPS 上安装（Ubuntu/Debian）：</b>
+<pre><code>curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs git
+git clone https://github.com/Hoangstephen/agent-alpha-hunter
+cd agent-alpha-hunter &amp;&amp; npm install</code></pre></li>
+  <li><b>连接 Telegram</b>（自动获取 chat id 并发送测试消息）：<code>node src/index.js telegram-setup --token 123456:ABC...</code></li>
+  <li><b>私有 RPC（建议）：</b><code>mkdir -p data &amp;&amp; echo '{"url":"https://bsc-mainnet.nodereal.io/v1/你的KEY"}' &gt; data/rpc.json</code></li>
+  <li><b>试运行：</b><code>npm run vps</code>（每 5 分钟扫描一次；可用 <code>node src/index.js vps --every 3</code> 修改）。按 Ctrl+C 停止。</li>
+  <li><b>后台 24/7 运行：</b>
+<pre><code>sudo npm i -g pm2
+pm2 start src/index.js --name alpha -- vps --every 5
+pm2 save &amp;&amp; pm2 startup     # VPS 重启后自动运行
+pm2 logs alpha              # 查看日志</code></pre></li>
+</ol>
+<p><code>data/telegram.json</code> 中的选项：<code>minHot</code>（默认 50：只提醒 Hot 分 50 以上的 NFT，宝藏项目总会提醒）、<code>lang</code>（<code>vi</code> / <code>en</code> / <code>zh</code>）、<code>repeatHours</code>（默认 6：同一 NFT 6 小时内不重复提醒）。安全分低于 40 的 NFT 会被跳过，可能的仿冒会明确标注。运行过 <code>telegram-setup</code> 后，电脑上的网页界面也会推送 Telegram 提醒。</p>
+<p>Telegram 机器人 token 保存在 <code>data/telegram.json</code>：请勿分享或上传到 GitHub（<code>data</code> 文件夹已被 git 排除）。</p>
 
 <h2>安全与限制</h2>
 <ul>

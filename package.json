@@ -7,7 +7,8 @@
     "scan": "node src/index.js scan",
     "watch": "node src/index.js watch",
     "test": "node --test test/*.test.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "vps": "node src/index.js vps"
   },
   "license": "MIT",
   "dependencies": {

@@ -423,3 +423,50 @@ test('Giới hạn mỗi ví đọc từ trang dự án; hợp đồng trùng t�
   assert.deepEqual(list[1].twins, ['0xA']);
   assert.equal(list[2].lookalike, undefined);
 });
+
+test('Telegram: chọn NFT cần báo, định dạng tin, không báo lặp, không lộ token', async () => {
+  const { formatAlert, pickAlerts, notifyScan, findChats } = await import('../src/telegram.js');
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const nfts = [
+    { address: '0xAAA', name: 'Hot <One>', hot: 70, risk: 90, priceBNB: 0.001, minted: '10', maxSupply: '100', uniqueMinters: 20, agentRatio: 1 },
+    { address: '0xBBB', name: 'Quiet Gem', hot: 30, gem: true, risk: 80, priceBNB: 0 },
+    { address: '0xCCC', name: 'Cold', hot: 20, risk: 90 },
+    { address: '0xDDD', name: 'Scam', hot: 90, risk: 20 },
+    { address: '0xEEE', name: 'Hot <One>', hot: 60, risk: 90, lookalike: { of: '0xAAA', minted: 10 } },
+  ];
+  const t = { minHot: 50, repeatHours: 6 };
+  assert.deepEqual(pickAlerts(nfts, t).map((n) => n.address), ['0xAAA', '0xBBB', '0xEEE']);
+  assert.deepEqual(pickAlerts(nfts, t, { '0xaaa': Date.now() }).map((n) => n.address), ['0xBBB', '0xEEE']);
+  const msg = formatAlert(nfts[0], 'vi');
+  assert.match(msg, /Hot &lt;One&gt;/);
+  assert.match(msg, /Giá: <b>0.001 BNB<\/b>/);
+  assert.match(formatAlert(nfts[4], 'en'), /POSSIBLE FAKE/);
+  assert.match(formatAlert(nfts[1], 'zh'), /宝藏项目/);
+
+  const sent = [];
+  const fetchFn = async (url, opt) => {
+    sent.push({ url, body: JSON.parse(opt.body) });
+    return { status: 200, json: async () => ({ ok: true, result: url.endsWith('getUpdates') ? [{ message: { chat: { id: 42, first_name: 'H' } } }] : {} }) };
+  };
+  process.env.TELEGRAM_BOT_TOKEN = 'SECRET123'; process.env.TELEGRAM_CHAT_ID = '42';
+  try {
+    const sentPath = join(mkdtempSync(join(tmpdir(), 'tg-')), 'alerted.json');
+    const logs = [];
+    assert.equal(await notifyScan({ nfts }, {}, (m) => logs.push(m), { fetchFn, sentPath }), 3);
+    assert.equal(sent.length, 3);
+    assert.equal(sent[0].body.chat_id, '42');
+    assert.equal(sent[0].body.parse_mode, 'HTML');
+    assert.equal(await notifyScan({ nfts }, {}, () => {}, { fetchFn, sentPath }), 0); // đã báo rồi thì thôi
+    assert.ok(!logs.join(' ').includes('SECRET123'));
+    // Lỗi từ Telegram không làm lộ token
+    const bad = async () => { throw new Error('connect fail https://api.telegram.org/botSECRET123/sendMessage'); };
+    const errs = [];
+    await notifyScan({ nfts: [{ ...nfts[0], address: '0xFFF' }] }, {}, (m) => errs.push(m), { fetchFn: bad, sentPath });
+    assert.ok(errs.length && !errs.join(' ').includes('SECRET123'), errs.join());
+    assert.deepEqual(await findChats('SECRET123', fetchFn), [{ id: '42', name: 'H' }]);
+  } finally {
+    delete process.env.TELEGRAM_BOT_TOKEN; delete process.env.TELEGRAM_CHAT_ID;
+  }
+});

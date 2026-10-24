@@ -7,6 +7,18 @@ by x : [@HoangFUDSCAM](https://x.com/HoangFUDSCAM)
 
 Bot tìm NFT "alpha" đang được mint trên BNB Chain, chấm điểm rủi ro, rồi mint qua **Binance Agentic Wallet** (CLI `baw`). Bot **không bao giờ** cần seed phrase hay private key: việc ký do Binance làm, bạn đăng nhập bằng QR trong app.
 
+
+## Chạy trên VPS + báo Telegram / VPS mode + Telegram alerts
+
+```bash
+git clone https://github.com/Hoangstephen/agent-alpha-hunter && cd agent-alpha-hunter && npm install
+node src/index.js telegram-setup --token <TOKEN từ @BotFather>   # nhắn bot 1 tin trước
+npm run vps                                                      # quét mỗi 5 phút, báo NFT hot / gem
+# chạy nền: pm2 start src/index.js --name alpha -- vps --every 5
+```
+
+Chế độ VPS chỉ quét và báo, không mint. Chi tiết: HUONG-DAN-SU-DUNG.html / GUIDE-EN.html / GUIDE-ZH.html.
+
 ## Đã kiểm chứng những gì
 
 | Thứ trong hướng dẫn | Kết quả |
