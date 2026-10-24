@@ -73,12 +73,16 @@ export function rulesFor(info, extra = {}) {
 
 const ipfs = (u) => (u?.startsWith('ipfs://') ? 'https://ipfs.io/ipfs/' + u.slice(7) : u);
 // Chỉ tải https tới tên miền công khai: chặn localhost / IP mạng nội bộ (hợp đồng lạ có thể cài link độc).
+// Web dự án: không nhận link kho lưu file (IPFS, Arweave…), đó là chỗ để ảnh/metadata chứ không phải trang bán.
+const STORAGE = /ipfs|arweave|pinata|nftstorage|w3s\.link|dweb|4everland|filebase|irys|amazonaws|cloudfront|googleapis/i;
+const siteUrl = (u) => { const x = safeUrl(u ?? ''); return x && !STORAGE.test(new URL(x).hostname) ? x : null; };
 function safeUrl(u) {
   try {
     const url = new URL(ipfs(u));
     if (url.protocol !== 'https:' || url.port) return null;
     const h = url.hostname;
     if (/^(localhost|.*\.local|.*\.internal)$/i.test(h) || /^[\d.]+$/.test(h) || h.includes(':')) return null;
+    if (!/\.[a-z]{2,}$/i.test(h)) return null; // phải là tên miền thật (vd. aivy.me), không phải mã IPFS
     return url.toString();
   } catch { return null; }
 }
@@ -243,20 +247,21 @@ export async function projectPage(provider, address, fetchFn = fetch) {
     const uri = await tryCall(provider, address, metaI, fn, args);
     if (!uri) continue;
     try { meta = await readJsonUri(String(uri).replace('{id}', '1'.padStart(64, '0')), fetchFn); } catch {}
-    const host = (() => { try { return new URL(String(uri)).hostname; } catch { return null; } })();
+    // Chỉ lấy tên miền từ link http(s). ipfs://<CID>/… không phải tên miền (CID bị hiểu nhầm thành host).
+    const host = (() => { try { const u = new URL(String(uri)); return /^https?:$/.test(u.protocol) && /\.[a-z]{2,}$/i.test(u.hostname) ? u.hostname : null; } catch { return null; } })();
     if (host && !/ipfs|arweave|pinata|nftstorage|cloudflare|amazonaws|googleapis|w3s\.link|dweb|4everland|filebase|irys|imgur|cloudfront/i.test(host)) v.metaHost ??= host.split('.').slice(-2).join('.');
     if (meta) break;
   }
   if (meta) {
-    v.site ??= safeUrl(meta.external_link ?? meta.external_url ?? meta.website ?? '') ?? null;
+    v.site ??= siteUrl(meta.external_link ?? meta.external_url ?? meta.website);
     if (meta.description) v.description = String(meta.description).slice(0, 600);
   }
   // Mã nguồn đã xác minh: chú thích của dự án + link website / X trong mã.
   const src = await verifiedSource(address, fetchFn).catch(() => ({ notes: [] }));
   v.sourceNotes = src.notes ?? [];
-  v.site ??= safeUrl(src.site ?? '') ?? null;
+  v.site ??= siteUrl(src.site);
   // Metadata nằm trên tên miền riêng của dự án (vd. https://aivy.me/api/meta/1) → thử trang chủ của tên miền đó.
-  if (!v.site && v.metaHost) v.site = safeUrl(`https://${v.metaHost}/`);
+  if (!v.site && v.metaHost) v.site = siteUrl(`https://${v.metaHost}/`);
   if (v.site) { try { v.html = (await fetchText(v.site, fetchFn)) ?? ''; } catch {} }
   v.description ??= metaDescription(v.html);
   v.x ??= extractX(v.html, meta ?? {}) ?? extractX(v.description ?? '') ?? src.x ?? null;

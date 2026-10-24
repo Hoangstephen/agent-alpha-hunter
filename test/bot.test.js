@@ -509,3 +509,14 @@ test('Luật cho mọi dự án: câu luật trong trang không có mục Rules,
   assert.match(w.description, /On-chain AI robots/);
   assert.ok(w.rules.some((x) => /up to 4 robots/.test(x)), JSON.stringify(w));
 });
+
+test('projectPage: metadata trên IPFS không bị hiểu nhầm thành web dự án', async () => {
+  const { projectPage } = await import('../src/rules.js');
+  const I = new Interface(['function contractURI() view returns (string)', 'function tokenURI(uint256) view returns (string)']);
+  const CID = 'bafybeiea7q7jd7shtmfkavay7dgpgx233hthf73lwkgl5mtycvxzjkcquu';
+  const provider = { async call({ data }) { const f = I.parseTransaction({ data }); if (f?.name === 'tokenURI') return coder.encode(['string'], [`ipfs://${CID}/1`]); throw new Error('revert'); } };
+  const fetchFn = async (url) => ({ ok: true, status: 200, headers: new Map([['content-type', 'application/json']]), json: async () => ({ name: 'X #1', external_url: `ipfs://${CID}/` }), text: async () => JSON.stringify({ name: 'X #1', external_url: `ipfs://${CID}/` }) });
+  const p = await projectPage(provider, '0x2d70000000000000000000000000000000003103', fetchFn);
+  assert.equal(p.site, null);
+  assert.equal(p.metaHost ?? null, null);
+});
