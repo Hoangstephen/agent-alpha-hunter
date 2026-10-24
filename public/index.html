@@ -598,7 +598,9 @@ $('sellBtn').onclick = async () => {
 };
 
 function listCell(r, h, it) {
-  if (it.tokenId == null) return '<span class="muted">Chưa biết số token</span>';
+  if (it.tokenId == null) return r.canList
+    ? `<span class="muted">Bot chưa tìm ra số token, xem trên BscScan rồi nhập:</span><br><input placeholder="Số token" style="width:90px" data-ltid> <input type="number" min="0" step="0.0001" style="width:80px" placeholder="Giá" data-lprice> BNB <button class="primary" data-list="${esc(h.contract)}" data-lname="${esc(h.name || 'NFT')}">Đăng bán</button>`
+    : '<span class="muted">Chưa biết số token</span>';
   if (it.listed) return `<span class="ok">Đang bán ${esc(bnb(it.listed.priceBNB))} BNB</span><br><span class="muted">tới ${esc(new Date(it.listed.expiresAt).toLocaleDateString())}</span>`;
   if (!r.canList) return `<span class="muted">${r.elementEnabled ? 'Đăng nhập ví Agentic để đăng bán' : 'Cần Element API key'}</span>`;
   const p = it.suggestBNB ?? it.best?.priceBNB ?? '';
@@ -648,8 +650,10 @@ document.addEventListener('click', async (e) => {
   if (!b) return;
   const price = b.parentElement.querySelector('[data-lprice]').value.trim();
   if (!(Number(price) > 0)) return alertBox('Nhập giá bán (BNB).');
+  const tid = b.dataset.tid ?? b.parentElement.querySelector('[data-ltid]')?.value.trim();
+  if (!/^\d{1,78}$/.test(tid ?? '')) return alertBox('Nhập số token (chỉ gồm chữ số).');
   b.disabled = true;
-  await startList({ contract: b.dataset.list, tokenId: b.dataset.tid, name: b.dataset.lname, priceBNB: price, days: $('asDays').value || 7 });
+  await startList({ contract: b.dataset.list, tokenId: tid, name: b.dataset.lname, priceBNB: price, days: $('asDays').value || 7 });
   b.disabled = false;
 });
 

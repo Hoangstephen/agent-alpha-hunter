@@ -14,6 +14,31 @@ const WBNB = '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c';
 const USDT = '0x55d398326f99059ff775485246999027b3197955';
 
 const ownerOfI = new Interface(['function ownerOf(uint256) view returns (address)']);
+const ownedI = new Interface(['function tokensOfOwner(address) view returns (uint256[])', 'function tokensOfOwnerIn(address,uint256,uint256) view returns (uint256[])']);
+const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11'; // cùng địa chỉ trên mọi chain EVM
+const mcI = new Interface(['function aggregate3((address target,bool allowFailure,bytes callData)[] calls) view returns ((bool success,bytes returnData)[])']);
+
+// Hợp đồng không hỗ trợ liệt kê và RPC không đọc được log: hỏi ownerOf của từng số token (gộp 400 số / 1 lần gọi
+// qua Multicall3), chỉ khi bộ NFT không quá lớn. Dừng khi đã đủ số NFT ví đang giữ.
+export async function idsByOwnerScan(provider, contract, wallet, want, { maxSupply = 20_000, batch = 400, deadlineMs = 25_000 } = {}) {
+  const total = Number((await tryCall(provider, contract, erc721, 'totalSupply')) ?? 0n);
+  if (!total || total > maxSupply) return [];
+  const me = wallet.toLowerCase();
+  const found = [];
+  const stopAt = Date.now() + deadlineMs;
+  for (let a = 0; a <= total && found.length < want && Date.now() < stopAt; a += batch) {
+    const ids = Array.from({ length: Math.min(batch, total + 1 - a) }, (_, i) => BigInt(a + i));
+    const calls = ids.map((id) => ({ target: contract, allowFailure: true, callData: ownerOfI.encodeFunctionData('ownerOf', [id]) }));
+    let res;
+    try {
+      [res] = mcI.decodeFunctionResult('aggregate3', await provider.call({ to: MULTICALL3, data: mcI.encodeFunctionData('aggregate3', [calls]) }));
+    } catch { return found; }
+    res.forEach((r, i) => {
+      if (r.success && r.returnData.length >= 66 && ('0x' + r.returnData.slice(-40)).toLowerCase() === me) found.push(ids[i].toString());
+    });
+  }
+  return found;
+}
 
 // NFT (ERC-721) ví đã nhận, không cần biết trước hợp đồng: lọc log Transfer có người nhận = ví.
 // Kết quả lưu ở data/wallet-nfts.json cùng đoạn block đã quét [lo, hi]. Mỗi lần bấm: quét phần block mới
@@ -97,6 +122,8 @@ export async function holdingsOf(provider, wallet, contracts, { received = new M
     if (!bal || bal === 0n) return null;
     const n = bal < 20n ? Number(bal) : 20;
     let ids = (await Promise.all(Array.from({ length: n }, (_, i) => tryCall(provider, c, erc721, 'tokenOfOwnerByIndex', [wallet, BigInt(i)])))).filter((x) => x !== null).map(String);
+    // ERC721A thường có tokensOfOwner(ví).
+    if (!ids.length) ids = [...((await tryCall(provider, c, ownedI, 'tokensOfOwner', [wallet])) ?? [])].slice(0, 20).map(String);
     if (!ids.length) {
       // Hợp đồng không hỗ trợ liệt kê: tìm id qua log nhận NFT của RIÊNG hợp đồng này (RPC dễ chấp nhận hơn log toàn mạng),
       // rồi kiểm tra lại chủ sở hữu hiện tại.
@@ -106,6 +133,7 @@ export async function holdingsOf(provider, wallet, contracts, { received = new M
       const owners = await Promise.all(cand.map((id) => tryCall(provider, c, ownerOfI, 'ownerOf', [BigInt(id)])));
       ids = cand.filter((_, i) => owners[i] && owners[i].toLowerCase() === wallet.toLowerCase()).slice(0, 20);
     }
+    if (!ids.length) ids = await idsByOwnerScan(provider, c, wallet, n, { deadlineMs }).catch(() => []);
     return { contract: c, name: await tryCall(provider, c, erc721, 'name'), balance: bal.toString(), tokenIds: ids };
   });
   return rows.filter(Boolean);

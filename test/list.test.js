@@ -176,3 +176,22 @@ test('lpLock: phân biệt LP đã đốt / nằm ở ví thường', async () =
   assert.equal(rug.verdict, 'unlocked');
   assert.match(rug.note, /90% LP/);
 });
+
+test('idsByOwnerScan: tìm số token qua ownerOf gộp Multicall3 khi hợp đồng không liệt kê được', async () => {
+  const { idsByOwnerScan } = await import('../src/sell.js');
+  const mc = new Interface(['function aggregate3((address target,bool allowFailure,bytes callData)[] calls) view returns ((bool success,bytes returnData)[])', 'function totalSupply() view returns (uint256)']);
+  const own = new Interface(['function ownerOf(uint256) view returns (address)']);
+  const OWNED = new Set([7n, 950n]);
+  const provider = {
+    async call({ to, data }) {
+      if (data.startsWith(mc.getFunction('totalSupply').selector)) return coder.encode(['uint256'], [1000n]);
+      const [calls] = mc.decodeFunctionData('aggregate3', data);
+      return mc.encodeFunctionResult('aggregate3', [calls.map((c) => {
+        const id = own.decodeFunctionData('ownerOf', c.callData)[0];
+        return [true, coder.encode(['address'], [OWNED.has(id) ? MAKER : '0x000000000000000000000000000000000000bEEF'])];
+      })]);
+    },
+  };
+  assert.deepEqual(await idsByOwnerScan(provider, NFT, MAKER, 2), ['7', '950']);
+  assert.deepEqual(await idsByOwnerScan(provider, NFT, MAKER, 1), ['7']);
+});
