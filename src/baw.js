@@ -1,6 +1,8 @@
 // Wrapper cho CLI `baw` (npm @binance/agentic-wallet). Bot không bao giờ chạm private key:
 // ví được ký bên Binance, bạn đăng nhập bằng QR.
 import { spawnSync, spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 export const BAW_PACKAGE = '@binance/agentic-wallet@1.11.0'; // requiredCliVersion của skill v1.13.0
 const WIN = process.platform === 'win32';
@@ -118,3 +120,38 @@ export function approvalsList(chainId = '56') {
 export function approvalsRevoke({ chainId = '56', tokenContract, spender, type }) {
   return baw(['approvals', 'revoke', '--binanceChainId', String(chainId), '--tokenContract', tokenContract, '--spender', spender, '--type', type]);
 }
+
+// Ký dữ liệu EIP-712 (lệnh bán trên sàn). Tham số là JSON có dấu ngoặc kép nên không được đi qua shell:
+// chạy thẳng file JS của baw bằng node (Windows) hoặc lệnh baw không qua shell (Mac/Linux).
+let script;
+function bawScript() {
+  if (script !== undefined) return script;
+  script = null;
+  try {
+    const r = spawnSync(WIN ? 'npm.cmd' : 'npm', ['root', '-g'], { encoding: 'utf8', shell: WIN });
+    const f = join(r.stdout.trim(), '@binance', 'agentic-wallet', 'dist', 'index.js');
+    if (existsSync(f)) script = f;
+  } catch {}
+  return script;
+}
+
+function bawJson(args) {
+  const s = process.env.BAW_BIN ? null : bawScript();
+  if (!process.env.BAW_BIN && WIN && !s) throw Object.assign(new Error('Không tìm thấy baw. Bấm "Cài baw" trên giao diện.'), { code: 'BAW_MISSING' });
+  const [file, pre] = process.env.BAW_BIN ? [process.env.BAW_BIN, []] : s ? [process.execPath, [s]] : [bawBin(), []];
+  const r = spawnSync(file, [...pre, ...args, '--json'], { encoding: 'utf8' });
+  if (r.error?.code === 'ENOENT') throw Object.assign(new Error('Chưa cài baw (CLI ví Binance). Bấm "Cài baw" trên giao diện.'), { code: 'BAW_MISSING' });
+  if (r.error) throw new Error(`Không chạy được baw: ${r.error.message}`);
+  return parse(r.stdout, r.stderr);
+}
+
+// Binance yêu cầu dạng gói JSON-RPC eth_signTypedData_v4. Bản CLI khác có thể chỉ nhận JSON typed data: thử lại dạng đó.
+export function signTypedPreview({ chainId = '56', address, typedData }) {
+  const td = JSON.stringify(typedData);
+  const wrapped = JSON.stringify({ method: 'eth_signTypedData_v4', params: [address, td] });
+  const r = bawJson(['sign-message', 'preview', '--binanceChainId', String(chainId), '--message', wrapped, '--signType', 'EIP712']);
+  if (r.success || !/message|format|param|invalid/i.test(JSON.stringify(r.error ?? ''))) return r;
+  return bawJson(['sign-message', 'preview', '--binanceChainId', String(chainId), '--message', td, '--signType', 'EIP712']);
+}
+export const signExecute = (requestId) => bawJson(['sign-message', 'execute', '--requestId', requestId]);
+export const signResult = (orderId) => bawJson(['sign-message', 'result', '--order-id', orderId]);

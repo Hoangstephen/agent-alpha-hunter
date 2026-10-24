@@ -29,7 +29,7 @@
   <li><b>Shows everything before you mint:</b> contract price, what others are paying, current sale price, estimated profit, live minted count, per-wallet limit, safety score 0–100.</li>
   <li><b>Project rules for every NFT</b>, read from the contract and the project website, plus the project's X link.</li>
   <li><b>One-click mint:</b> pick a quantity, press Mint, confirm. A "wait for mint to open" button alerts you when minting starts.</li>
-  <li><b>Sell and clean up:</b> find the best sell price for NFTs you hold, view and revoke token approvals.</li>
+  <li><b>Sell and clean up:</b> find the best sell price for NFTs you hold, list them on Element straight from the Agentic Wallet (with optional auto-listing), check whether a gang.fun token's liquidity (LP) is locked or burned, view and revoke token approvals.</li>
   <li><b>🔥 Hot</b> (0–100) shows how much attention a project gets (minting wallets, Agent ID ratio, mentions on X). It is not a safety score. <b>💎 Gem</b> marks Agent-ID-only projects that mint slowly and few people know about yet.</li>
   <li><b>Lookalike warning:</b> when two contracts share a name, the one with fewer mints gets a red "possible fake" warning.</li>
   <li><b>Learns how to mint:</b> if a contract uses an unusual mint function, the bot copies the call from someone else's successful mint (swapping in your wallet and Agent ID). You still confirm every mint.</li>
@@ -79,7 +79,17 @@
   <tr><td>Revoke token approvals</td><td><b>Token approvals</b> → <b>View approvals</b> → <b>Revoke</b></td><td>Revoke "unlimited" or risky approvals first</td></tr>
 </table>
 <p>Contracts whose <code>mint()</code> gives 1 NFT per call: choose 3 and the bot sends 3 transactions one after another, each confirmed separately. The price is probed each time because the first mint may be free.</p>
-<p>The bot never lists NFTs for sale. Listing needs <code>setApprovalForAll</code> for the marketplace, so do it on the marketplace's official site (for example Element).</p>
+
+
+<h2>List NFTs on Element (Agentic Wallet)</h2>
+<p>Element's website shows no List button for the Agentic Wallet because that wallet can't connect to the site. The bot lists for you, and the listing shows on Element as usual.</p>
+<ol>
+  <li>Get a free <b>Element API key</b> at element.market (Developer / API), paste it into <b>Element API key</b> in the Sell section → <b>Save key</b>.</li>
+  <li>Press <b>Find best sell price</b>. Each NFT gets a price box (pre-filled with a suggested price) and a <b>List</b> button.</li>
+  <li>First time for each collection: step 1/2 lets Element transfer the NFT when someone buys (small gas fee). The bot only allows this for Element's exchange contract <code>0xb3e3DfCb2d9f3DdE16d78B9e6EB3538Eb32B5ae1</code>.</li>
+  <li>The confirm box shows the price, marketplace fee, royalty and the BNB you receive → <b>Sign and list</b> (no gas).</li>
+</ol>
+<p><b>Auto-listing</b> (off by default): tick it, set your markup over mint price, a floor price and days → <b>Save</b>. Every 15 minutes the bot lists NFTs not yet listed at the highest of: recent median sale price, mint price + markup, floor price. With no reference price it doesn't list. On a VPS: <code>node src/index.js element-key --key KEY</code> then <code>node src/index.js autosell --on --markup 30 --min 0.01</code>.</p>
 
 <h2>Run on a VPS (terminal) with Telegram alerts</h2>
 <p>For 24/7 hunting on a Linux VPS with no GUI. In this mode the bot <b>only scans and alerts</b> hot NFTs / 💎 hidden gems to Telegram and <b>never mints</b>; when you see a good one, mint it on your computer with the web interface as usual.</p>

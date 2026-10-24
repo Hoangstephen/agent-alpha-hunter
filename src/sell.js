@@ -1,13 +1,14 @@
 // Tìm giá bán cao nhất cho NFT bạn đang giữ.
 // - Lệnh mua (offer) trên sàn Element: bán được ngay ở giá này (cần ELEMENT_API_KEY).
 // - Giá bán gần đây trên chain: tham khảo, đọc từ giao dịch có chuyển NFT kèm trả BNB/WBNB/USDT.
-// Bot KHÔNG tự đăng bán: đăng bán phải cấp setApprovalForAll cho sàn, đúng kiểu lừa của drainer,
-// nên việc đó làm trên trang chính thức của sàn.
+// Đăng bán thật nằm ở list.js (ký lệnh Element bằng ví Agentic) và autosell.js (tự đăng theo quy tắc).
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { getAddress, formatEther, Interface, zeroPadValue } from 'ethers';
 import { TOPIC, tryCall, erc721, getLogsChunked, topicToAddress, mapLimit } from './chain.js';
 import { STABLES } from './risk.js';
+import { ADDR } from './config.js';
+import { projectPage } from './rules.js';
 
 const WBNB = '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c';
 const USDT = '0x55d398326f99059ff775485246999027b3197955';
@@ -229,12 +230,15 @@ export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, lo
     idsFromTxs(provider, wallet, mintTxs).catch(() => new Map()),
   ]);
   for (const [c, ids] of fromTxs) received.set(c, new Set([...(received.get(c) ?? []), ...ids]));
-  const holdings = await holdingsOf(provider, wallet, contracts, { received });
+  // Agent ID (.ai) là NFT soulbound: không chuyển/bán được, bỏ khỏi danh sách bán.
+  const holdings = (await holdingsOf(provider, wallet, contracts, { received })).filter((h) => h.contract.toLowerCase() !== ADDR.AGENT_ID_REGISTRY.toLowerCase());
   let element = { enabled: false, offers: new Map() };
   try { element = await elementOffers(cfg, wallet); } catch (e) { element.error = e.message; }
 
   await mapLimit(holdings, 3, async (h) => {
     // Giá bán trong ~1,5 ngày gần nhất (BSC ~0,75 giây/block), lọc theo hợp đồng nên RPC chịu được đoạn lớn.
+    // Web dự án: nhiều dự án có chợ riêng và cho kết nối thẳng ví Agentic (Element thì không).
+    h.site = await Promise.race([projectPage(provider, h.contract).then((p) => p.site).catch(() => null), new Promise((r) => setTimeout(() => r(null), 8000))]);
     h.sales = await recentSales(provider, h.contract, { blocks: 180_000, chunk: 5000, bnbUsdt, deadlineMs: 25_000 }).catch(() => ({ count: 0 }));
     h.items = (h.tokenIds.length ? h.tokenIds : [null]).map((id) => {
       const offer = id != null ? element.offers.get(`${h.contract.toLowerCase()}:${id}`) : null;

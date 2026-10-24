@@ -30,7 +30,7 @@
   <li><b>Luật dự án bằng tiếng Việt cho từng NFT:</b> lấy từ hợp đồng và trang web dự án.</li>
   <li><b>Link X của dự án</b> và nút tìm dự án trên X.</li>
   <li><b>Mint 1 nút bấm:</b> chọn số lượng, bấm Mint, xác nhận. Có nút chờ mở mint, đến giờ bot báo để bạn xác nhận.</li>
-  <li><b>Bán và dọn ví:</b> tìm giá bán cao nhất cho NFT đang giữ, xem và thu hồi (revoke) quyền token đã cấp.</li>
+  <li><b>Bán và dọn ví:</b> tìm giá bán cao nhất cho NFT đang giữ, đăng bán trên Element ngay từ ví Agentic (có chế độ tự đăng bán), kiểm tra thanh khoản (LP) của token gang.fun đã khoá/đốt chưa, xem và thu hồi (revoke) quyền token đã cấp.</li>
   <li>Quy đổi BNB ≈ USDT và hiện số dư ví.</li>
   <li><b>🔥 Hot</b> (0–100) là mức độ được quan tâm (số ví mint, tỉ lệ ví Agent ID, nhắc trên X), không phải điểm an toàn. <b>💎 Gem</b> là dự án dành cho ví Agent ID, mint chậm nên ít người biết.</li>
   <li><b>Cảnh báo hàng nhái:</b> 2 hợp đồng trùng tên thì cái ít người mint hơn bị gắn cảnh báo đỏ.</li>
@@ -82,7 +82,17 @@
   <tr><td>Thu hồi quyền token</td><td>Mục <b>Quyền token đã cấp</b> → <b>Xem quyền đã cấp</b> → <b>Revoke</b></td><td>Ưu tiên thu hồi quyền "vô hạn" hoặc bị đánh dấu rủi ro</td></tr>
 </table>
 <p>Hợp đồng có hàm <code>mint()</code> mỗi lần ra 1 NFT (như Xuanwu Sigil): chọn 3 thì bot gửi 3 giao dịch lần lượt, mỗi giao dịch bạn xác nhận riêng. Giá từng lần được dò tự động, vì lần đầu có thể miễn phí.</p>
-<p>Bot không tự đăng bán NFT. Đăng bán cần cấp quyền <code>setApprovalForAll</code> cho sàn, nên hãy làm trên trang chính thức của sàn (ví dụ Element).</p>
+
+
+<h2>Đăng bán NFT trên Element (ví Agentic)</h2>
+<p>Web Element không hiện nút List cho ví Agentic vì ví này không kết nối được vào web. Bot đăng bán thay bạn, lệnh vẫn hiện trên Element bình thường.</p>
+<ol>
+  <li>Lấy <b>Element API key</b> miễn phí ở element.market (mục Developer / API), dán vào ô <b>Element API key</b> trong mục Bán NFT → <b>Lưu key</b>.</li>
+  <li>Bấm <b>Tìm giá bán cao nhất</b>. Mỗi NFT có ô giá (điền sẵn giá gợi ý) và nút <b>Đăng bán</b>.</li>
+  <li>Lần đầu với mỗi bộ NFT: bước 1/2 là cho sàn Element quyền chuyển NFT khi có người mua (tốn ít gas). Bot chỉ cho phép cấp quyền cho đúng hợp đồng sàn Element <code>0xb3e3DfCb2d9f3DdE16d78B9e6EB3538Eb32B5ae1</code>.</li>
+  <li>Hộp xác nhận hiện giá, phí sàn, bản quyền dự án và số BNB bạn nhận về → <b>Ký và đăng bán</b> (không tốn gas).</li>
+</ol>
+<p><b>Tự đăng bán</b> (tắt mặc định): tick <b>Tự đăng bán NFT mới về ví</b>, đặt % lời so với giá mint, giá sàn, số ngày → <b>Lưu</b>. Mỗi 15 phút bot đăng các NFT chưa đăng với giá = cao nhất trong: giá bán trung vị gần đây, giá mint + % lời, giá sàn. Không có giá tham khảo thì bot không đăng. Trên VPS: <code>node src/index.js element-key --key KEY</code> rồi <code>node src/index.js autosell --on --markup 30 --min 0.01</code>.</p>
 
 <h2>Chạy trên VPS (terminal) và báo về Telegram</h2>
 <p>Dùng khi muốn bot săn 24/7 trên VPS Linux không có giao diện. Ở chế độ này bot <b>chỉ quét và báo</b> NFT hot / 💎 hidden gem về Telegram, <b>không mint</b>; thấy kèo thì bạn mint trên máy tính bằng giao diện web như bình thường.</p>

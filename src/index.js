@@ -7,6 +7,8 @@ import { connect } from './chain.js';
 import { scanAll } from './scanner.js';
 import { inspectContract } from './risk.js';
 import { mint } from './mint.js';
+import { autoSellConfig, saveAutoSell, autoSellTick } from './autosell.js';
+import { bscAddress } from './baw.js';
 import { telegramConfig, telegramReady, saveTelegram, findChats, sendTelegram, notifyScan } from './telegram.js';
 
 const HELP = `
@@ -23,6 +25,12 @@ Bot săn NFT alpha (BNB Chain) — dùng Binance Agentic Wallet qua CLI baw
   node src/index.js telegram-setup --token <TOKEN>   Lưu bot Telegram (tạo bằng @BotFather), tự lấy chat id, gửi tin thử
   node src/index.js vps [--every 5]                  Quét liên tục mỗi N phút, in bảng ra terminal, báo NFT hot/gem về Telegram
         (chỉ báo, KHÔNG mint: mint luôn cần bạn tự xác nhận trên giao diện)
+
+  Tự đăng bán NFT trong ví lên Element (ký bằng ví Agentic, cần Element API key):
+  node src/index.js element-key --key <KEY>          Lưu Element API key vào data/element.json
+  node src/index.js autosell --on [--markup 30] [--min 0.01] [--days 7]   Bật tự đăng bán (chạy kèm lệnh vps / giao diện)
+  node src/index.js autosell --off                   Tắt tự đăng bán
+        Giá đăng = cao nhất trong: giá bán trung vị gần đây, giá mint + markup %, giá sàn --min. Không có giá tham khảo thì không đăng.
 
   --config <file>   (mặc định config.json)
 `;
@@ -48,6 +56,9 @@ async function vps(provider, cfg, everyMin) {
   const t = telegramConfig(cfg);
   console.log(`[vps] quét mỗi ${everyMin} phút · Telegram: ${telegramReady(t) ? `bật (Hot ≥ ${t.minHot} hoặc Gem)` : 'TẮT (chạy telegram-setup để bật)'}`);
   if (telegramReady(t)) await sendTelegram(t, '🦅 Agent Alpha Hunter đã chạy trên VPS. Bot sẽ báo NFT hot / hidden gem tại đây.').catch((e) => console.log(`[telegram] ${e.message}`));
+  const a0 = autoSellConfig();
+  console.log(`[vps] Tự đăng bán: ${a0.enabled ? (cfg.elementKey ? `BẬT (mỗi ${a0.everyMin} phút)` : 'BẬT nhưng thiếu Element API key') : 'TẮT'}`);
+  let nextSell = 0;
   let stop = false;
   process.on('SIGINT', () => { if (stop) process.exit(0); stop = true; console.log('\n[vps] dừng sau lượt này (Ctrl+C lần nữa để thoát ngay)'); });
   process.on('SIGTERM', () => process.exit(0));
@@ -57,6 +68,15 @@ async function vps(provider, cfg, everyMin) {
       const r = await scanAll(provider, cfg, (m) => console.log(`${new Date().toLocaleTimeString()} ${m}`));
       console.table(r.nfts.slice(0, 12).map((n) => ({ name: (n.name ?? '?').slice(0, 24), contract: n.address, hot: n.hot, gem: n.gem ? '💎' : '', 'giá BNB': n.priceBNB ?? '?', 'đã mint': n.minted ?? n.mints ?? '?', 'an toàn': n.risk ?? '-', nhái: n.lookalike ? '⚠' : '' })));
       await notifyScan(r, cfg, console.log);
+      // Tự đăng bán NFT trong ví (chỉ khi đã bật trong data/autosell.json và có Element API key).
+      const a = autoSellConfig();
+      if (a.enabled && Date.now() >= nextSell) {
+        nextSell = Date.now() + a.everyMin * 60_000;
+        let addr = cfg.walletAddress;
+        try { addr ||= bscAddress(cfg.binanceChainId); } catch {}
+        await autoSellTick(provider, cfg, addr, { scanNfts: r.nfts, log: (m) => console.log(`${new Date().toLocaleTimeString()} ${m}`) })
+          .catch((e) => console.log(`[tự bán] lỗi: ${e.message}`));
+      }
     } catch (e) {
       console.log(`[vps] lỗi lượt quét: ${e.shortMessage || e.message}`);
     }
@@ -82,12 +102,23 @@ async function main() {
       config: { type: 'string', default: 'config.json' },
       fn: { type: 'string' }, qty: { type: 'string', default: '1' }, args: { type: 'string' }, 'value-bnb': { type: 'string' }, 'accept-risk': { type: 'boolean' },
       preview: { type: 'boolean' }, live: { type: 'boolean' },
-      every: { type: 'string' }, token: { type: 'string' }, help: { type: 'boolean', short: 'h' },
+      every: { type: 'string' }, token: { type: 'string' }, key: { type: 'string' },
+      on: { type: 'boolean' }, off: { type: 'boolean' }, markup: { type: 'string' }, min: { type: 'string' }, days: { type: 'string' }, help: { type: 'boolean', short: 'h' },
     },
   });
   const [cmd, target] = positionals;
   if (!cmd || values.help) return console.log(HELP);
   if (cmd === 'telegram-setup') return telegramSetup(values.token);
+  if (cmd === 'element-key') {
+    if (!values.key) return console.log('Dùng: node src/index.js element-key --key <KEY> (lấy tại element.market → Developer / API)');
+    mkdirSync('data', { recursive: true });
+    writeFileSync('data/element.json', JSON.stringify({ key: values.key.trim() }));
+    return console.log('Đã lưu Element API key vào data/element.json (không chia sẻ file này).');
+  }
+  if (cmd === 'autosell') {
+    const c = saveAutoSell({ enabled: values.on ? true : values.off ? false : undefined, markupPct: values.markup, minPriceBNB: values.min, days: values.days });
+    return console.log(`Tự đăng bán: ${c.enabled ? 'BẬT' : 'TẮT'} · lời ${c.markupPct}% so với giá mint · giá sàn ${c.minPriceBNB} BNB · hạn ${c.days} ngày · tối đa ${c.maxPerRun} NFT/lượt, mỗi ${c.everyMin} phút`);
+  }
   const cfg = loadConfig(values.config);
   const provider = await connect(cfg);
 

@@ -16,4 +16,30 @@ else if (a.startsWith('auth signout')) out({ success: true, data: { status: 'LOG
 else if (a.startsWith('approvals list') && a.includes('--binanceChainId')) { console.error("error: unknown option '--binanceChainId'"); process.exitCode = 1; }
 else if (a.startsWith('approvals list')) out({ success: true, data: { list: [{ tokenSymbol: 'USDT', tokenContract: '0x55d398326f99059fF775485246999027B3197955', tokenDecimals: 18, spender: '0x5555555555555555555555555555555555555555', spenderName: null, amount: 'unlimited', riskyLevel: 'high', riskyMsg: 'Spender contract is unverified', binanceChainId: '56', type: 'approve' }, { tokenSymbol: 'ETH', tokenContract: '0x2222222222222222222222222222222222222222', spender: '0x3333333333333333333333333333333333333333', amount: '1', binanceChainId: '1', type: 'approve' }], offset: 0, limit: 20, total: 1 } });
 else if (a.startsWith('approvals revoke')) out({ success: true, data: { orderId: 'r1', status: 'BROADCASTED', txHash: '0x' + 'cd'.repeat(32) } });
+else if (a.startsWith('sign-message')) await signMessage();
 else out({ success: false, error: { message: 'unknown ' + a } });
+
+// Ký EIP-712 bằng khoá test (FAKE_SIGN_KEY), lưu lệnh chờ trong thư mục tạm giữa preview và execute.
+async function signMessage() {
+  const { Wallet } = await import('ethers');
+  const { writeFileSync, readFileSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+  const argv = process.argv.slice(2);
+  const opt = (k) => argv[argv.indexOf(k) + 1];
+  const file = (id) => join(tmpdir(), `fake-baw-${id}.json`);
+  if (argv[1] === 'preview') {
+    const m = JSON.parse(opt('--message'));
+    const td = m.method === 'eth_signTypedData_v4' ? JSON.parse(m.params[1]) : m;
+    const id = 'sig-' + Date.now();
+    writeFileSync(file(id), JSON.stringify(td));
+    return out({ success: true, data: { requestId: id, requireConfirmation: false } });
+  }
+  if (argv[1] === 'execute') {
+    const td = JSON.parse(readFileSync(file(opt('--requestId')), 'utf8'));
+    const { EIP712Domain, ...types } = td.types;
+    const signature = await new Wallet(process.env.FAKE_SIGN_KEY).signTypedData(td.domain, types, td.message);
+    return out({ success: true, data: { orderId: 'm1', status: 'SUCCESS', signature } });
+  }
+  out({ success: false, error: { message: 'unknown sign-message' } });
+}

@@ -141,6 +141,21 @@
       <input id="sellExtra" placeholder="Thêm địa chỉ NFT (0x…, cách nhau dấu phẩy)">
       <button id="sellBtn" class="primary">Tìm giá bán cao nhất</button>
     </div>
+    <div class="loginbox" id="listBox">
+      <b>🏷 Đăng bán trên Element ngay từ ví Agentic</b> <span class="muted">(không cần kết nối ví vào web Element)</span>
+      <div class="bar">
+        <input id="elKey" type="password" placeholder="Element API key (lấy miễn phí: element.market → Developer)" autocomplete="off">
+        <button id="elKeyBtn">Lưu key</button> <span id="elKeyInfo" class="muted"></span>
+      </div>
+      <div class="bar">
+        <label><input type="checkbox" id="asOn"> Tự đăng bán NFT mới về ví</label>
+        <label>Lời so với giá mint <input id="asMarkup" type="number" min="0" step="1" style="width:70px"> %</label>
+        <label>Giá sàn <input id="asMin" type="number" min="0" step="0.0001" style="width:90px"> BNB</label>
+        <label>Hạn <input id="asDays" type="number" min="1" max="90" style="width:60px"> ngày</label>
+        <button id="asBtn">Lưu</button> <span id="asInfo" class="muted"></span>
+      </div>
+      <div class="muted">Giá tự đăng = cao nhất trong: giá bán trung vị gần đây, giá mint + % lời, giá sàn. Không có giá tham khảo thì bot không đăng. Mỗi bộ NFT, lần đầu cần cho sàn Element quyền chuyển NFT khi có người mua (bot chỉ cho phép đúng hợp đồng sàn Element). Ký lệnh bán không tốn gas.</div>
+    </div>
     <div id="sell"></div>
   </section>
 
@@ -324,7 +339,7 @@ async function refresh() {
     $('nfts').innerHTML = s.scan.nfts.length ? s.scan.nfts.map(card).join('') : `<div class="muted">${s.scan.partial ? 'Đang tìm…' : 'Chưa thấy NFT nào mint nóng trong ~10 phút qua.'}</div>`;
     document.querySelectorAll('#nfts [data-qty]').forEach((i) => syncQty(i.closest('.card')));
     $('tokens').innerHTML = s.scan.tokens.length
-      ? `<table><tr><th>Tên</th><th>Mã</th><th>Token</th></tr>${s.scan.tokens.slice(0, 8).map((t) => `<tr><td>${esc(t.name)}</td><td>${esc(t.symbol)}</td><td class="addr"><a href="https://bscscan.com/token/${esc(t.address)}" target="_blank" rel="noopener">${esc(short(t.address))}</a></td></tr>`).join('')}</table>`
+      ? `<table><tr><th>Tên</th><th>Mã</th><th>Token</th><th>Thanh khoản (LP)</th></tr>${s.scan.tokens.slice(0, 8).map((t) => `<tr><td>${esc(t.name)}</td><td>${esc(t.symbol)}</td><td class="addr"><a href="https://bscscan.com/token/${esc(t.address)}" target="_blank" rel="noopener">${esc(short(t.address))}</a></td><td data-lpbox="${esc(t.address)}">${lpResults.get(t.address) ?? `<button data-lp="${esc(t.address)}" data-quote="${esc(t.quote || '')}">Kiểm tra khoá LP</button>`}</td></tr>`).join('')}</table>`
       : 'Chưa có token mới trong cửa sổ quét.';
   }
 }
@@ -514,6 +529,19 @@ $('confirmBtn').onclick = async () => {
     setTimeout(loadApprovals, 15000);
     return;
   }
+  if (pendingId && String(pendingStep).startsWith('list-')) {
+    $('confirmBtn').disabled = true;
+    $('dlgBody').innerHTML = pendingStep === 'list-approve' ? '<h3>Đang cấp quyền, chờ xác nhận trên chain…</h3>' : '<h3>Đang ký bằng ví Agentic và gửi lên Element…</h3>';
+    const r = await api('/api/list/execute', { id: pendingId });
+    pendingId = null;
+    $('confirmBtn').disabled = false;
+    if (r.ok && r.next === 'list') return startList(pendingList); // sang bước 2
+    $('confirmBtn').hidden = true;
+    $('dlgBody').innerHTML = !r.ok ? `<h3 class="bad">Lỗi</h3><p>${esc(r.error)}</p>`
+      : r.next === 'retry' ? `<h3 class="warn">${esc(r.message)}</h3>`
+      : `<h3 class="ok">Đã đăng bán ✓</h3><a href="${esc(r.url)}" target="_blank" rel="noopener">Xem trên Element</a>`;
+    return;
+  }
   if (!pendingId) return;
   $('confirmBtn').disabled = true;
   $('dlgBody').innerHTML = pendingStep === 'approve' ? '<h3>Đang approve, chờ xác nhận trên chain…</h3>' : '<h3>Đang gửi và chờ xác nhận trên chain…</h3>';
@@ -558,15 +586,92 @@ $('sellBtn').onclick = async () => {
   const rows = r.holdings.flatMap((h) => h.items.map((it) => ({ h, it })));
   const fmt = (o) => o ? `<b>${esc(o.priceBNB.toFixed(5).replace(/\.?0+$/, ''))} BNB</b> <span class="muted">${esc(usd(o.priceBNB))}</span><br><span class="muted">${esc(o.venue)}</span>` : '<span class="muted">Chưa ai bán trong ~1,5 ngày qua: chưa có giá tham khảo, tự đặt giá khi đăng bán trên sàn</span>';
   $('sell').innerHTML = (rows.length
-    ? `<table><tr><th>NFT</th><th>Giá cao nhất tìm thấy</th><th></th></tr>${rows.map(({ h, it }) => `<tr>
-        <td>${esc(h.name || 'NFT')} ${it.tokenId != null ? '#' + esc(it.tokenId) : `(x${esc(h.balance)})`}<div class="addr">${esc(short(h.contract))}</div></td>
+    ? `<table><tr><th>NFT</th><th>Giá cao nhất tìm thấy</th><th>Đăng bán</th><th></th></tr>${rows.map(({ h, it }) => `<tr>
+        <td>${esc(h.name || 'NFT')} ${it.tokenId != null ? '#' + esc(String(it.tokenId).length > 12 ? String(it.tokenId).slice(0, 6) + '…' + String(it.tokenId).slice(-4) : it.tokenId) : `(x${esc(h.balance)})`}<div class="addr">${esc(short(h.contract))}</div></td>
         <td>${fmt(it.best)}</td>
-        <td>${it.elementUrl ? `<a href="${esc(it.elementUrl)}" target="_blank" rel="noopener">Bán trên Element</a><br>` : ''}<a href="https://bscscan.com/token/${esc(h.contract)}?a=${esc(r.wallet)}" target="_blank" rel="noopener">BscScan</a></td>
+        <td>${listCell(r, h, it)}</td>
+        <td>${h.site ? `<a href="${esc(h.site)}" target="_blank" rel="noopener"><b>Bán trên web dự án</b></a><br>` : ''}${it.elementUrl ? `<a href="${esc(it.elementUrl)}" target="_blank" rel="noopener">Xem trên Element</a><br>` : ''}<a href="https://bscscan.com/token/${esc(h.contract)}?a=${esc(r.wallet)}" target="_blank" rel="noopener">BscScan</a></td>
       </tr>`).join('')}</table>`
     : '<div class="muted">Không thấy NFT nào trong ví thuộc các hợp đồng đã kiểm tra. Thêm địa chỉ NFT vào ô bên cạnh rồi thử lại.</div>')
-    + (r.elementEnabled ? '' : '<p class="muted">ℹ Chưa có ELEMENT_API_KEY nên chưa đọc được lệnh mua trên Element, chỉ có giá bán gần đây trên chain.</p>')
-    + '<p class="muted">ℹ Bot không tự đăng bán: đăng bán cần cấp quyền setApprovalForAll cho sàn, nên hãy làm trên trang chính thức của sàn và kiểm tra kỹ địa chỉ.</p>';
+    + (r.elementEnabled ? '' : '<p class="muted">ℹ Chưa có Element API key nên chưa đọc được lệnh mua trên Element và chưa đăng bán được. Dán key ở khung phía trên.</p>')
+    + '<p class="muted">ℹ Web Element không hiện nút List cho ví Agentic vì ví này không kết nối được vào web. Bot đăng bán thay bạn: lệnh bán vẫn hiện trên Element như bình thường. Nhiều dự án cũng có chợ riêng ("Bán trên web dự án"). Agent ID (.ai) không bán được nên không hiện ở đây. Tên trên Element (vd. "#153") là tên trong metadata, có thể khác số token ID bot hiện.</p>';
 };
+
+function listCell(r, h, it) {
+  if (it.tokenId == null) return '<span class="muted">Chưa biết số token</span>';
+  if (it.listed) return `<span class="ok">Đang bán ${esc(bnb(it.listed.priceBNB))} BNB</span><br><span class="muted">tới ${esc(new Date(it.listed.expiresAt).toLocaleDateString())}</span>`;
+  if (!r.canList) return `<span class="muted">${r.elementEnabled ? 'Đăng nhập ví Agentic để đăng bán' : 'Cần Element API key'}</span>`;
+  const p = it.suggestBNB ?? it.best?.priceBNB ?? '';
+  return `<input type="number" min="0" step="0.0001" style="width:90px" value="${esc(p === '' ? '' : bnb(p, 4))}" data-lprice> BNB <button class="primary" data-list="${esc(h.contract)}" data-tid="${esc(it.tokenId)}" data-lname="${esc(h.name || 'NFT')}">Đăng bán</button>`;
+}
+
+// Kiểm tra LP token có bị khoá/đốt không. Nhớ kết quả để không mất khi bảng vẽ lại.
+const lpResults = new Map();
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-lp]');
+  if (!b) return;
+  const t = b.dataset.lp;
+  b.disabled = true; b.textContent = 'Đang đọc LP…';
+  const r = await api('/api/lp', { token: t, quote: b.dataset.quote || undefined }).catch((x) => ({ ok: false, error: x.message }));
+  const cls = { burned: 'ok', contract: 'warn', unlocked: 'bad', mixed: 'warn' }[r.verdict] || 'muted';
+  const html = !r.ok ? `<span class="bad">${esc(r.error)}</span>`
+    : `<span class="${cls}">${esc(r.note)}</span>${r.pair ? `<br><a href="https://bscscan.com/token/${esc(r.pair)}#balances" target="_blank" rel="noopener">Ai giữ LP</a>` : ''}${(r.holders || []).slice(0, 3).map((h) => `<div class="addr">${esc(h.pct)}% · ${h.kind === 'burned' ? 'đã đốt' : h.kind === 'contract' ? 'hợp đồng' : 'ví thường'} · <a href="https://bscscan.com/address/${esc(h.address)}" target="_blank" rel="noopener">${esc(short(h.address))}</a></div>`).join('')}`;
+  lpResults.set(t, html);
+  document.querySelectorAll(`[data-lpbox="${t}"]`).forEach((el) => (el.innerHTML = html));
+});
+
+let pendingList = null;
+async function startList(l) {
+  pendingList = l;
+  const r = await api('/api/list/preview', { contract: l.contract, tokenId: l.tokenId, priceBNB: l.priceBNB, days: l.days });
+  pendingId = r.ok ? r.id : null;
+  pendingStep = r.ok ? 'list-' + r.step : null;
+  $('confirmBtn').hidden = !r.ok;
+  $('confirmBtn').textContent = r.step === 'approve' ? 'Cho phép (bước 1/2)' : 'Ký và đăng bán';
+  const fees = (r.fees || []).map((f) => `${esc(f.label)} ${esc(f.pct)}%: ${esc(bnb(f.bnb, 6))} BNB`).join('<br>');
+  $('dlgBody').innerHTML = !r.ok ? `<h3 style="margin-top:0" class="bad">Không đăng bán được</h3><p>${esc(r.error)}</p>`
+    : r.step === 'approve'
+      ? `<h3 style="margin-top:0">Bước 1/2: cho sàn Element quyền chuyển NFT ${esc(l.name)}</h3>
+         <p>Lần đầu bán bộ NFT này, sàn cần quyền chuyển NFT cho người mua khi có người trả tiền. Bot chỉ cấp quyền này cho đúng hợp đồng sàn Element:</p>
+         <div class="addr">0xb3e3DfCb2d9f3DdE16d78B9e6EB3538Eb32B5ae1</div>
+         ${(r.risks || []).length ? `<p class="bad">⚠ ${r.risks.map(esc).join('<br>⚠ ')}</p>` : '<p class="ok">Binance không báo rủi ro.</p>'}
+         <p class="muted">Tốn một ít gas BNB. Có thể thu hồi sau ở mục Quyền đã cấp.</p>${r.needsAppApproval ? '<p class="warn">Sau khi xác nhận, bạn cần duyệt thêm trong app Binance.</p>' : ''}`
+      : `<h3 style="margin-top:0">Đăng bán ${esc(l.name)} #${esc(String(l.tokenId).length > 12 ? String(l.tokenId).slice(0, 6) + '…' : l.tokenId)}</h3>
+         <p>Giá: <b>${esc(bnb(r.priceBNB, 6))} BNB</b> <span class="muted">${usd(r.priceBNB)}</span></p>
+         <p class="muted">${fees || 'Không có phí'}</p>
+         <p>Bạn nhận về: <b>${esc(bnb(r.receiveBNB, 6))} BNB</b></p>
+         <p class="muted">Lệnh hết hạn ${esc(new Date(r.expiresAt).toLocaleString())}. Ký bằng ví Agentic, không tốn gas. Muốn huỷ sớm: đăng giá mới hoặc huỷ trên Element.</p>`;
+  if (!$('dlg').open) $('dlg').showModal();
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-list]');
+  if (!b) return;
+  const price = b.parentElement.querySelector('[data-lprice]').value.trim();
+  if (!(Number(price) > 0)) return alertBox('Nhập giá bán (BNB).');
+  b.disabled = true;
+  await startList({ contract: b.dataset.list, tokenId: b.dataset.tid, name: b.dataset.lname, priceBNB: price, days: $('asDays').value || 7 });
+  b.disabled = false;
+});
+
+async function loadAutoSell() {
+  const a = await api('/api/autosell').catch(() => null);
+  if (!a) return;
+  $('asOn').checked = a.enabled; $('asMarkup').value = a.markupPct; $('asMin').value = a.minPriceBNB; $('asDays').value = a.days;
+  $('elKeyInfo').textContent = a.hasKey ? '✓ đã có key' : 'chưa có key';
+  $('asInfo').textContent = a.last ? `lượt gần nhất ${new Date(a.last.at).toLocaleTimeString()}: đăng ${a.last.listed} NFT` : '';
+}
+$('elKeyBtn').onclick = async () => {
+  $('elKeyBtn').disabled = true;
+  const r = await api('/api/element-key', { key: $('elKey').value });
+  $('elKeyBtn').disabled = false; $('elKey').value = '';
+  $('elKeyInfo').innerHTML = r.ok ? (r.saved ? '<span class="ok">✓ đã lưu key</span>' : 'đã xoá key') : `<span class="bad">${esc(r.error)}</span>`;
+};
+$('asBtn').onclick = async () => {
+  if ($('asOn').checked && !(Number($('asMin').value) > 0) && !confirm('Chưa đặt giá sàn. Bot vẫn đăng theo giá bán gần đây / giá mint + % lời. Tiếp tục?')) return;
+  const r = await api('/api/autosell', { enabled: $('asOn').checked, markupPct: $('asMarkup').value, minPriceBNB: $('asMin').value, days: $('asDays').value });
+  $('asInfo').innerHTML = r.ok ? (r.enabled ? `<span class="ok">Đã bật${r.hasKey ? '' : ' (thiếu Element API key: chưa chạy được)'}</span>` : 'Đã tắt') : `<span class="bad">${esc(r.error)}</span>`;
+};
+loadAutoSell();
 
 // Số đã mint theo thời gian thực: hỏi lại hợp đồng 10 giây một lần cho các thẻ đang hiện.
 setInterval(async () => {
@@ -717,6 +822,8 @@ document.addEventListener('click', (e) => {
     'Binance không báo rủi ro.': ['Binance reported no risks.', 'Binance 未报告风险。'],
     'Preview hết hạn sau ~4 phút.': ['Preview expires in ~4 minutes.', '预览约 4 分钟后过期。'],
     'Xem trên BscScan': ['View on BscScan', '在 BscScan 查看'],
+    'Bán trên web dự án': ['Sell on project site', '在项目网站出售'],
+    'Xem trên Element': ['View on Element', '在 Element 查看'],
     'Lỗi': ['Error', '错误'],
     'Làm mới': ['Refresh', '刷新'],
     'Số dư ví': ['Wallet balance', '钱包余额'],

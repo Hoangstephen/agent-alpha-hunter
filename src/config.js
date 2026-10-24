@@ -52,6 +52,9 @@ export function loadConfig(path = 'config.json') {
   // Khoá API chỉ đọc từ biến môi trường, không bao giờ ghi vào file.
   cfg.xBearerToken = process.env.X_BEARER_TOKEN || '';
   cfg.etherscanKey = process.env.ETHERSCAN_API_KEY || '';
-  cfg.elementKey = process.env.ELEMENT_API_KEY || '';
+  // Element API key dán trên giao diện được lưu ở data/element.json (không chia sẻ file này).
+  let el = {};
+  try { el = JSON.parse(readFileSync(resolve('data/element.json'), 'utf8')); } catch {}
+  cfg.elementKey = process.env.ELEMENT_API_KEY || el.key || '';
   return cfg;
 }
