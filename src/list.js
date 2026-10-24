@@ -49,7 +49,7 @@ export function decodeExpiry(e) {
 }
 
 export async function elementApi(cfg, path, { body, fetchFn = fetch } = {}) {
-  if (!cfg.elementKey) throw new Error('Chưa có Element API key. Dán key ở mục Bán NFT (lấy miễn phí tại element.market → Developer).');
+  if (!cfg.elementKey) throw new Error('Chưa có Element API key. Dán key ở mục Bán NFT (lấy miễn phí tại form https://forms.gle/78wpggURGADCjshr7).');
   const r = await fetchFn(ELEMENT.API + path, {
     method: body ? 'POST' : 'GET',
     headers: { 'x-api-key': cfg.elementKey, 'content-type': 'application/json', accept: 'application/json' },

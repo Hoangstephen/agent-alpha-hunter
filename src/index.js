@@ -110,7 +110,7 @@ async function main() {
   if (!cmd || values.help) return console.log(HELP);
   if (cmd === 'telegram-setup') return telegramSetup(values.token);
   if (cmd === 'element-key') {
-    if (!values.key) return console.log('Dùng: node src/index.js element-key --key <KEY> (lấy tại element.market → Developer / API)');
+    if (!values.key) return console.log('Dùng: node src/index.js element-key --key <KEY> (lấy tại form https://forms.gle/78wpggURGADCjshr7)');
     mkdirSync('data', { recursive: true });
     writeFileSync('data/element.json', JSON.stringify({ key: values.key.trim() }));
     return console.log('Đã lưu Element API key vào data/element.json (không chia sẻ file này).');
