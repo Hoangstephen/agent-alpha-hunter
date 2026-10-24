@@ -76,9 +76,17 @@ export function markLookalikes(list) {
 }
 
 // Lãi/lỗ ước tính mỗi NFT nếu mint rồi bán ngay ở giá trung vị gần đây (chưa trừ phí sàn).
+// Giá vốn là giá VÍ BẠN sẽ trả (giá theo ví, không có thì giá trên hợp đồng), không phải giá người khác đã trả:
+// người khác có thể được mint miễn phí (lần đầu free, có Agent ID…) trong khi bạn phải trả.
 export function profitBNB(n) {
-  const cost = (n.paid?.priceBNB ?? n.priceBNB ?? 0) + (n.paid?.gasBNB ?? 0);
-  return n.sales?.medianBNB ? n.sales.medianBNB - cost : null;
+  if (!n.sales?.medianBNB) return null;
+  const price = n.walletPriceBNB ?? n.priceBNB ?? n.paid?.priceBNB ?? 0;
+  return n.sales.medianBNB - price - (n.paid?.gasBNB ?? 0);
+}
+// Lãi nếu bạn cũng được mint miễn phí như người khác (chỉ tính khi giá trên hợp đồng > 0 mà họ trả 0).
+export function profitIfFreeBNB(n) {
+  if (!n.sales?.medianBNB || !n.paid?.free || !((n.walletPriceBNB ?? n.priceBNB) > 0)) return null;
+  return n.sales.medianBNB - (n.paid?.gasBNB ?? 0);
 }
 
 export async function scanAll(provider, cfg, log = console.log, { walletAddr, bnbUsdt, onProgress = () => {} } = {}) {
@@ -135,6 +143,7 @@ export async function scanAll(provider, cfg, log = console.log, { walletAddr, bn
       ]);
       Object.assign(n, { paid, sales });
       n.profitBNB = profitBNB(n);
+      n.profitIfFreeBNB = profitIfFreeBNB(n);
     }
     done += 1;
     report('Bước 2/2: kiểm tra giá, giới hạn, rủi ro', { done, total: top.length, result: partial() });

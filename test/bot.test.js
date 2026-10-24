@@ -520,3 +520,12 @@ test('projectPage: metadata trên IPFS không bị hiểu nhầm thành web dự
   assert.equal(p.site, null);
   assert.equal(p.metaHost ?? null, null);
 });
+
+test('profitBNB: giá vốn là giá ví bạn trả, không phải giá người khác được miễn phí', async () => {
+  const { profitBNB, profitIfFreeBNB } = await import('../src/scanner.js');
+  const n = { priceBNB: 0.00067, walletPriceBNB: null, paid: { priceBNB: 0, free: true, gasBNB: 0.000008 }, sales: { medianBNB: 0.00023 } };
+  assert.ok(Math.abs(profitBNB(n) - (0.00023 - 0.00067 - 0.000008)) < 1e-12); // lỗ
+  assert.ok(Math.abs(profitIfFreeBNB(n) - (0.00023 - 0.000008)) < 1e-12);
+  assert.equal(profitIfFreeBNB({ ...n, priceBNB: 0 }), null);
+  assert.equal(profitBNB({ ...n, sales: { count: 0 } }), null);
+});
