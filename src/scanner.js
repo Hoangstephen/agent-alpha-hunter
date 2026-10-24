@@ -7,7 +7,7 @@ import { inspectContract } from './risk.js';
 import { mapLimit } from './chain.js';
 import { maxQty, unitCostBNB } from './mint.js';
 import { mintStats, recentSales } from './sell.js';
-import { rulesFor, projectPage } from './rules.js';
+import { rulesFor, projectPage, webRules } from './rules.js';
 
 // Điểm hot: nhiều ví mint khác nhau + tỉ lệ ví Agent ID cao + được nhắc trên X.
 export function alphaScore(row) {
@@ -119,7 +119,14 @@ export async function scanAll(provider, cfg, log = console.log, { walletAddr, bn
     const pg = await page;
     n.projectX = pg?.x ?? null;
     if (info && info.maxPerWallet == null && pg?.perWallet) Object.assign(info, { maxPerWallet: BigInt(pg.perWallet), perWalletFrom: 'site' });
+    // Luật từ web dự án / mã nguồn, tải sẵn cho các thẻ đầu (không phải bấm mở mới thấy).
+    const web = i < 8 && info ? await Promise.race([webRules(provider, n.address, info).catch(() => null), new Promise((r) => setTimeout(() => r(null), 12_000))]) : null;
     if (info) Object.assign(n, summarize(info, cfg, { bnbUsdt }), { name: n.name ?? info.name });
+    if (web && n.rules) {
+      if (!n.rules.rules?.length && web.rules?.length) Object.assign(n.rules, { rules: web.rules, site: n.rules.site ?? web.site, fromSource: web.fromSource });
+      if (web.description) n.rules.description ??= web.description;
+      if (web.checks?.length) n.rules.checks = [...new Set([...(n.rules.checks ?? []), ...web.checks])];
+    }
     // Giá người khác đang trả + giá đang bán được (top 6 để đỡ tốn RPC).
     if (i < 6) {
       const [paid, sales] = await Promise.all([

@@ -470,3 +470,42 @@ test('Telegram: chọn NFT cần báo, định dạng tin, không báo lặp, kh
     delete process.env.TELEGRAM_BOT_TOKEN; delete process.env.TELEGRAM_CHAT_ID;
   }
 });
+
+test('Luật cho mọi dự án: câu luật trong trang không có mục Rules, mô tả meta, chú thích mã nguồn, web từ tên miền metadata', async () => {
+  const { ruleSentences, metaDescription, sourceFacts, webRules } = await import('../src/rules.js');
+  const text = 'Welcome to AIVY. 7,777 on-chain AI robots. Mint with your Binance AI Agent wallet. Each wallet can mint up to 4 robots for life. First mint is free; gas is additional. Accept cookies to continue.';
+  const r = ruleSentences(text);
+  assert.ok(r.some((x) => /up to 4 robots/.test(x)));
+  assert.ok(r.some((x) => /First mint is free/.test(x)));
+  assert.ok(!r.some((x) => /cookies/.test(x)));
+  assert.equal(metaDescription('<head><meta property="og:description" content="Genesis mint for AI agents, 3 per wallet"></head>'), 'Genesis mint for AI agents, 3 per wallet');
+  const src = `// SPDX-License-Identifier: MIT
+/// @title Gearz Cog
+/// @notice Mint Cogs with an Agent ID. Each Agent ID can mint 5 cogs during public phase.
+// Website: https://gearz.example/mint  X: https://x.com/gearz_cogs
+// SPDX-License-Identifier: MIT
+// OpenZeppelin Contracts v5 (token/ERC721/ERC721.sol)
+/// @notice Mints a token with maximum supply checks from the library`;
+  const f = sourceFacts(src);
+  assert.ok(f.notes.some((x) => /Each Agent ID can mint 5 cogs/.test(x)), JSON.stringify(f));
+  assert.ok(!f.notes.some((x) => /library/.test(x)));
+  assert.equal(f.site, 'https://gearz.example/mint');
+  assert.equal(f.x, 'https://x.com/gearz_cogs');
+
+  // Hợp đồng chỉ có tokenURI trên tên miền dự án, trang là app JS (không có mục Rules) → vẫn ra luật.
+  const ADDR = '0x9999999999999999999999999999999999999999';
+  const provider = { call: async ({ data }) => (data.startsWith(new Interface(['function tokenURI(uint256)']).getFunction('tokenURI').selector)
+    ? AbiCoder.defaultAbiCoder().encode(['string'], ['https://api.robots.example/meta/1']) : '0x') };
+  const fetchFn = async (url) => {
+    const u = String(url);
+    if (u.includes('sourcify')) return { ok: false, status: 404, json: async () => ({}), text: async () => '' };
+    if (u.includes('translate.googleapis')) return { ok: true, json: async () => [[[decodeURIComponent(u.split('q=')[1]) + ' (vi)']]] };
+    if (u.startsWith('https://api.robots.example/')) return { ok: true, text: async () => JSON.stringify({ name: 'Robot #1' }) };
+    if (u === 'https://robots.example/') return { ok: true, text: async () => `<html><head><meta name="description" content="On-chain AI robots for Agent wallets"></head><body><div id="root"></div><p>${text}</p></body></html>` };
+    return { ok: false, status: 404, text: async () => '' };
+  };
+  const w = await webRules(provider, ADDR, {}, fetchFn);
+  assert.equal(w.site, 'https://robots.example/');
+  assert.match(w.description, /On-chain AI robots/);
+  assert.ok(w.rules.some((x) => /up to 4 robots/.test(x)), JSON.stringify(w));
+});

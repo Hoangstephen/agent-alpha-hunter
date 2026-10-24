@@ -53,7 +53,11 @@ export function rulesFor(info, extra = {}) {
   if (extra.priceText) auto.push(`Giá: ${extra.priceText}.`);
   if (extra.walletPriceText && extra.walletPriceText !== extra.priceText) auto.push(`Giá lần mint tới của ví bạn: ${extra.walletPriceText}.`);
   if (info.startAt) auto.push(`Mở mint lúc ${new Date(info.startAt * 1000).toISOString().replace('T', ' ').slice(0, 16)} UTC.`);
-  if (info.mintOpen === false) auto.push('Hợp đồng đang báo mint ĐÓNG.');
+  if (info.payToken) auto.push(`Trả bằng ${info.payToken.symbol} (cần cho phép hợp đồng dùng đúng số tiền trước khi mint).`);
+  if (info.agentMint) auto.push('Mint theo Agent ID: dùng số ID của tên .ai của bạn, giá đọc từ hàm quote() của hợp đồng.');
+  if (info.mintCandidates?.[0]) auto.push(`Hàm mint: ${info.mintCandidates[0]}${/\(\)$/.test(info.mintCandidates[0]) ? ' (mỗi giao dịch ra 1 NFT)' : ''}.`);
+  if (info.verified === false) auto.push('Mã nguồn hợp đồng CHƯA xác minh trên BscScan: chỉ đọc được qua bytecode.');
+    if (info.mintOpen === false) auto.push('Hợp đồng đang báo mint ĐÓNG.');
   if (info.paused === true) auto.push('Hợp đồng đang TẠM DỪNG.');
   const c = contractRules(info);
   const needsAgent = k?.needsAgentId || info.usesAgentId || c.rules.some((r) => r.includes('Agent ID'));
@@ -115,6 +119,59 @@ export function extractRules(html) {
     for (const t of items) if (t.length >= 8 && t.length <= 400 && !out.includes(t)) out.push(t);
   }
   return out.slice(0, 12);
+}
+
+// Câu nói về luật mint ở bất kỳ đâu trong trang (dùng khi trang không có mục "Rules" rõ ràng).
+const RULE_WORDS = /\b(mint(ing|ed)?|per wallet|each wallet|every wallet|max(imum)?|limit|supply|free|price|cost|phase|whitelist|allow ?list|agent ?id|\.ai\b|claim|airdrop|reward|holder|stake|burn|reveal|royalt|refund|tier)\b|铸造|每个钱包|免费|白名单|mỗi ví|miễn phí/i;
+export function ruleSentences(text = '', max = 8) {
+  const out = [];
+  for (const raw of String(text).split(/(?<=[.!?。！？])\s+|\s*[•·|]\s*|\n+/)) {
+    const t = raw.replace(/\s+/g, ' ').trim();
+    if (t.length < 20 || t.length > 260 || !RULE_WORDS.test(t) || /cookie|privacy|terms of|copyright|©|javascript|enable js/i.test(t)) continue;
+    if (!out.some((o) => o === t || o.includes(t) || t.includes(o))) out.push(t);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+export function metaDescription(html = '') {
+  const m = String(html).match(/<meta[^>]+(?:name|property)=["'](?:og:)?description["'][^>]*content=["']([^"']{10,600})["']/i)
+    ?? String(html).match(/<meta[^>]+content=["']([^"']{10,600})["'][^>]*(?:name|property)=["'](?:og:)?description["']/i);
+  return m ? decode(m[1]).trim() : null;
+}
+
+// Mã nguồn đã xác minh (Sourcify, miễn phí; hoặc BscScan nếu có ETHERSCAN_API_KEY): lấy chú thích NatSpec,
+// link website/X trong mã. Đây là chữ do chính người viết hợp đồng để lại.
+const scache = new Map();
+export async function verifiedSource(address, fetchFn = fetch) {
+  const key = address.toLowerCase();
+  if (scache.has(key)) return scache.get(key);
+  let src = '';
+  try {
+    const r = await fetchFn(`https://sourcify.dev/server/v2/contract/56/${address}?fields=sources`, { signal: AbortSignal.timeout(7000) });
+    if (r.ok) src = Object.values((await r.json())?.sources ?? {}).map((x) => x?.content ?? '').join('\n');
+  } catch {}
+  if (!src && process.env.ETHERSCAN_API_KEY) {
+    try {
+      const j = await (await fetchFn(`https://api.etherscan.io/v2/api?chainid=56&module=contract&action=getsourcecode&address=${address}&apikey=${process.env.ETHERSCAN_API_KEY}`, { signal: AbortSignal.timeout(7000) })).json();
+      src = String(j?.result?.[0]?.SourceCode ?? '');
+    } catch {}
+  }
+  const v = sourceFacts(src);
+  scache.set(key, v);
+  return v;
+}
+// Hàm thuần: từ mã nguồn → các dòng chú thích nói về luật + link website / X.
+export function sourceFacts(src = '') {
+  // Bỏ thư viện chuẩn (OpenZeppelin, ERC721A...) để chỉ lấy chú thích của dự án.
+  const own = String(src).split(/(?=\/\/ SPDX-License-Identifier)/).filter((f) => !/openzeppelin|erc721a|solady|solmate/i.test(f.slice(0, 2000))).join('\n');
+  const notes = [...own.matchAll(/(?:\/\/\/?|\*)\s*(?:@(?:title|notice|dev)\s+)?([^\n*]{20,240})/g)].map((m) => m[1].trim())
+    .filter((t) => RULE_WORDS.test(t) && !/SPDX|pragma|license|solidity|@param|@return|import /i.test(t));
+  const urls = [...own.matchAll(/https:\/\/[a-z0-9.-]+\.[a-z]{2,}[^\s"'<>)]*/gi)].map((m) => m[0]).filter((u) => !/github\.com|openzeppelin|eips\.ethereum|ethereum\.org|docs\.soliditylang|ipfs\.io|etherscan|bscscan/i.test(u));
+  return {
+    notes: [...new Set(notes)].slice(0, 8),
+    site: urls.find((u) => !/(x|twitter|t\.me|discord|telegram)\.(com|me|gg)/i.test(u)) ?? null,
+    x: extractX(urls.join(' ')),
+  };
 }
 
 // Dịch sang tiếng Việt qua Google Translate (endpoint công khai, không cần key). Lỗi thì giữ nguyên bản gốc.
@@ -186,14 +243,23 @@ export async function projectPage(provider, address, fetchFn = fetch) {
     const uri = await tryCall(provider, address, metaI, fn, args);
     if (!uri) continue;
     try { meta = await readJsonUri(String(uri).replace('{id}', '1'.padStart(64, '0')), fetchFn); } catch {}
+    const host = (() => { try { return new URL(String(uri)).hostname; } catch { return null; } })();
+    if (host && !/ipfs|arweave|pinata|nftstorage|cloudflare|amazonaws|googleapis|w3s\.link|dweb|4everland|filebase|irys|imgur|cloudfront/i.test(host)) v.metaHost ??= host.split('.').slice(-2).join('.');
     if (meta) break;
   }
   if (meta) {
     v.site ??= safeUrl(meta.external_link ?? meta.external_url ?? meta.website ?? '') ?? null;
     if (meta.description) v.description = String(meta.description).slice(0, 600);
   }
+  // Mã nguồn đã xác minh: chú thích của dự án + link website / X trong mã.
+  const src = await verifiedSource(address, fetchFn).catch(() => ({ notes: [] }));
+  v.sourceNotes = src.notes ?? [];
+  v.site ??= safeUrl(src.site ?? '') ?? null;
+  // Metadata nằm trên tên miền riêng của dự án (vd. https://aivy.me/api/meta/1) → thử trang chủ của tên miền đó.
+  if (!v.site && v.metaHost) v.site = safeUrl(`https://${v.metaHost}/`);
   if (v.site) { try { v.html = (await fetchText(v.site, fetchFn)) ?? ''; } catch {} }
-  v.x ??= extractX(v.html, meta ?? {}) ?? extractX(v.description ?? '');
+  v.description ??= metaDescription(v.html);
+  v.x ??= extractX(v.html, meta ?? {}) ?? extractX(v.description ?? '') ?? src.x ?? null;
   v.perWallet = rememberSite(address, `${strip(v.html.replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, ''))} ${v.description ?? ''}`);
   pcache.set(key, { at: Date.now(), v });
   return v;
@@ -205,7 +271,12 @@ export async function webRules(provider, address, info = {}, fetchFn = fetch) {
   const key = address.toLowerCase();
   if (wcache.has(key) && Date.now() - wcache.get(key).at < 30 * 60_000) return wcache.get(key).v;
   const page = await projectPage(provider, address, fetchFn);
-  const res = { site: page.site, x: page.x, description: page.description, rules: page.html ? extractRules(page.html) : [], checks: [] };
+  const clean = page.html ? strip(page.html.replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, ' ')) : '';
+  let rules = page.html ? extractRules(page.html) : [];
+  if (!rules.length) rules = ruleSentences(`${clean} ${page.description ?? ''}`);
+  // Chú thích trong mã nguồn hợp đồng (nếu đã xác minh) bổ sung thêm.
+  for (const n of page.sourceNotes ?? []) if (rules.length < 12 && !rules.includes(n)) rules.push(n);
+  const res = { site: page.site, x: page.x, description: page.description, rules, checks: [], fromSource: (page.sourceNotes ?? []).length > 0 };
   const [desc, ...rest] = await translateVi([res.description, ...res.rules, ...contractRules(info).untranslated], fetchFn);
   res.description = desc;
   res.rules = rest.slice(0, res.rules.length);

@@ -234,7 +234,8 @@ function card(n) {
   const rulesHtml = `<details data-rules="${esc(n.address)}"${r.rules?.length || openRules.has(n.address) ? ' open' : ''}><summary>📜 Luật dự án${r.project ? ' · ' + esc(r.project) : ''}</summary>
     ${r.auto?.length ? `<div class="muted">Số liệu đọc từ hợp đồng:</div><ul>${r.auto.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
     ${r.checks?.length ? `<div class="muted">Điều kiện hợp đồng thực sự kiểm tra khi mint:</div><ul>${r.checks.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
-    ${r.rules?.length ? `<div class="muted">Theo trang dự án${r.site ? ` (<a href="${esc(r.site)}" target="_blank" rel="noopener">${esc(r.site.replace('https://', ''))}</a>)` : ''}:</div><ul>${r.rules.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : `<div data-web>${webRulesHtml(n.address)}</div>`}
+    ${r.description ? `<div class="muted">Giới thiệu:</div><div>${esc(r.description)}</div>` : ''}
+    ${r.rules?.length ? `<div class="muted">Theo ${r.site ? `trang dự án (<a href="${esc(r.site)}" target="_blank" rel="noopener">${esc(r.site.replace('https://', ''))}</a>)` : 'mã nguồn hợp đồng'}${r.project ? '' : ', dịch máy, dự án tự viết nên hãy đối chiếu'}:</div><ul>${r.rules.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : `<div data-web>${webRulesHtml(n.address)}</div>`}
   </details>`;
   const bonus = r.setBonus ? `<div class="ok">🎁 ${esc(r.setBonus.text)}</div>` : '';
   const paid = n.paid ? (n.paid.free ? '<b class="ok">Miễn phí</b>' : `<b>${money(n.paid.priceBNB)}</b>`) + (n.paid.gasBNB ? ` <span class="muted">+ gas ${bnb(n.paid.gasBNB, 6)} BNB ${usd(n.paid.gasBNB)}</span>` : '') : '<span class="muted">chưa có dữ liệu</span>';
