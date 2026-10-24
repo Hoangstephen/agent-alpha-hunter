@@ -590,12 +590,23 @@ $('sellBtn').onclick = async () => {
         <td>${esc(h.name || 'NFT')} ${it.tokenId != null ? '#' + esc(String(it.tokenId).length > 12 ? String(it.tokenId).slice(0, 6) + '…' + String(it.tokenId).slice(-4) : it.tokenId) : `(x${esc(h.balance)})`}<div class="addr">${esc(short(h.contract))}</div></td>
         <td>${fmt(it.best)}</td>
         <td>${listCell(r, h, it)}</td>
-        <td>${h.site ? `<a href="${esc(h.site)}" target="_blank" rel="noopener"><b>Bán trên web dự án</b></a><br>` : ''}${it.elementUrl ? `<a href="${esc(it.elementUrl)}" target="_blank" rel="noopener">Xem trên Element</a><br>` : ''}<a href="https://bscscan.com/token/${esc(h.contract)}?a=${esc(r.wallet)}" target="_blank" rel="noopener">BscScan</a></td>
+        <td>${marketLinks(h)}${h.site ? `<a href="${esc(h.site)}" target="_blank" rel="noopener"><b>Bán trên web dự án</b></a><br>` : ''}${it.elementUrl ? `<a href="${esc(it.elementUrl)}" target="_blank" rel="noopener">Xem trên Element</a><br>` : ''}<a href="https://bscscan.com/token/${esc(h.contract)}?a=${esc(r.wallet)}" target="_blank" rel="noopener">BscScan</a></td>
       </tr>`).join('')}</table>`
     : '<div class="muted">Không thấy NFT nào trong ví thuộc các hợp đồng đã kiểm tra. Thêm địa chỉ NFT vào ô bên cạnh rồi thử lại.</div>')
     + (r.elementEnabled ? '' : '<p class="muted">ℹ Chưa có Element API key nên chưa đọc được lệnh mua trên Element và chưa đăng bán được. Dán key ở khung phía trên.</p>')
     + '<p class="muted">ℹ Web Element không hiện nút List cho ví Agentic vì ví này không kết nối được vào web. Bot đăng bán thay bạn: lệnh bán vẫn hiện trên Element như bình thường. Nhiều dự án cũng có chợ riêng ("Bán trên web dự án"). Agent ID (.ai) không bán được nên không hiện ở đây. Tên trên Element (vd. "#153") là tên trong metadata, có thể khác số token ID bot hiện.</p>';
 };
+
+// Chợ riêng của bộ NFT, bot tự tìm từ các giao dịch mua bán gần đây trên chain.
+function marketLinks(h) {
+  return (h.markets || []).filter((m) => m.name !== 'Element').map((m) => {
+    const host = (() => { try { return new URL(m.site).hostname; } catch { return null; } })();
+    const label = `Chợ ${esc(host || m.name || short(m.address))} (${esc(m.sales)} giao dịch, ${esc(m.sellers)} người bán)`;
+    return m.site
+      ? `<a href="${esc(m.site)}" target="_blank" rel="noopener"><b>${label}</b></a><br>`
+      : `<a href="https://bscscan.com/address/${esc(m.address)}" target="_blank" rel="noopener">${label}</a><br>`;
+  }).join('');
+}
 
 function listCell(r, h, it) {
   if (it.tokenId == null) return r.canList

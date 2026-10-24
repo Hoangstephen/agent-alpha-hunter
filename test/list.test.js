@@ -195,3 +195,25 @@ test('idsByOwnerScan: tìm số token qua ownerOf gộp Multicall3 khi hợp đ�
   assert.deepEqual(await idsByOwnerScan(provider, NFT, MAKER, 2), ['7', '950']);
   assert.deepEqual(await idsByOwnerScan(provider, NFT, MAKER, 1), ['7']);
 });
+
+test('findMarkets: nhận ra hợp đồng chợ từ giao dịch chuyển NFT, bỏ chuyển thẳng giữa 2 ví', async () => {
+  const { findMarkets } = await import('../src/markets.js');
+  const { TOPIC } = await import('../src/chain.js');
+  const { zeroPadValue } = await import('ethers');
+  const MARKET = '0x5555555555555555555555555555555555555555';
+  const NFT2 = '0x6666666666666666666666666666666666666666';
+  const log = (i, from) => ({ address: NFT2, transactionHash: '0x' + String(i).padStart(64, '0'), blockNumber: 100 + i, topics: [TOPIC.TRANSFER, zeroPadValue(from, 32), zeroPadValue(MAKER, 32), zeroPadValue('0x' + i.toString(16).padStart(2, '0'), 32)] });
+  const sellers = ['0x00000000000000000000000000000000000000a1', '0x00000000000000000000000000000000000000a2', '0x00000000000000000000000000000000000000a3'];
+  const logs = [log(1, sellers[0]), log(2, sellers[1]), log(3, sellers[2]), log(4, sellers[0])];
+  const provider = {
+    getBlockNumber: async () => 1000,
+    getLogs: async () => logs,
+    getCode: async (a) => (a.toLowerCase() === MARKET ? '0x6080' : '0x'),
+    getTransaction: async (h) => ({ to: h.endsWith('4') ? NFT2 : MARKET, data: h.endsWith('4') ? '0x23b872dd' + '00'.repeat(96) : '0xabcdef01' + '00'.repeat(64) }),
+  };
+  const r = await findMarkets(provider, NFT2, { fetchFn: async () => ({ ok: false }) });
+  assert.equal(r.length, 1);
+  assert.equal(r[0].address.toLowerCase(), MARKET);
+  assert.equal(r[0].sales, 3);
+  assert.equal(r[0].sellers, 3);
+});

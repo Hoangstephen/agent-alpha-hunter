@@ -9,6 +9,7 @@ import { TOPIC, tryCall, erc721, getLogsChunked, topicToAddress, mapLimit } from
 import { STABLES } from './risk.js';
 import { ADDR } from './config.js';
 import { projectPage } from './rules.js';
+import { findMarkets } from './markets.js';
 
 const WBNB = '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c';
 const USDT = '0x55d398326f99059ff775485246999027b3197955';
@@ -266,7 +267,11 @@ export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, lo
   await mapLimit(holdings, 3, async (h) => {
     // Giá bán trong ~1,5 ngày gần nhất (BSC ~0,75 giây/block), lọc theo hợp đồng nên RPC chịu được đoạn lớn.
     // Web dự án: nhiều dự án có chợ riêng và cho kết nối thẳng ví Agentic (Element thì không).
-    h.site = await Promise.race([projectPage(provider, h.contract).then((p) => p.site).catch(() => null), new Promise((r) => setTimeout(() => r(null), 8000))]);
+    // Chợ riêng của bộ NFT: đọc từ các giao dịch chuyển NFT gần đây (không cần Element API key).
+    [h.site, h.markets] = await Promise.all([
+      Promise.race([projectPage(provider, h.contract).then((p) => p.site).catch(() => null), new Promise((r) => setTimeout(() => r(null), 8000))]),
+      Promise.race([findMarkets(provider, h.contract, { chunk: 5000 }).catch(() => []), new Promise((r) => setTimeout(() => r([]), 30_000))]),
+    ]);
     h.sales = await recentSales(provider, h.contract, { blocks: 180_000, chunk: 5000, bnbUsdt, deadlineMs: 25_000 }).catch(() => ({ count: 0 }));
     h.items = (h.tokenIds.length ? h.tokenIds : [null]).map((id) => {
       const offer = id != null ? element.offers.get(`${h.contract.toLowerCase()}:${id}`) : null;

@@ -175,6 +175,7 @@ export function sourceFacts(src = '') {
     notes: [...new Set(notes)].slice(0, 8),
     site: urls.find((u) => !/(x|twitter|t\.me|discord|telegram)\.(com|me|gg)/i.test(u)) ?? null,
     x: extractX(urls.join(' ')),
+    name: [...own.matchAll(/^\s*contract\s+([A-Za-z_]\w*)/gm)].at(-1)?.[1] ?? null, // tên hợp đồng chính (khai báo cuối)
   };
 }
 
