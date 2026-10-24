@@ -602,7 +602,8 @@ function listCell(r, h, it) {
     ? `<span class="muted">Bot chưa tìm ra số token, xem trên BscScan rồi nhập:</span><br><input placeholder="Số token" style="width:90px" data-ltid> <input type="number" min="0" step="0.0001" style="width:80px" placeholder="Giá" data-lprice> BNB <button class="primary" data-list="${esc(h.contract)}" data-lname="${esc(h.name || 'NFT')}">Đăng bán</button>`
     : '<span class="muted">Chưa biết số token</span>';
   if (it.listed) return `<span class="ok">Đang bán ${esc(bnb(it.listed.priceBNB))} BNB</span><br><span class="muted">tới ${esc(new Date(it.listed.expiresAt).toLocaleDateString())}</span>`;
-  if (!r.canList) return `<span class="muted">${r.elementEnabled ? 'Đăng nhập ví Agentic để đăng bán' : 'Cần Element API key'}</span>`;
+  if (!r.canList) return r.elementEnabled ? '<span class="muted">Đăng nhập ví Agentic để đăng bán</span>'
+    : '<span class="warn">Element bắt buộc có API key mới cho đăng bán.</span><br><span class="muted">Dán key ở khung phía trên, hoặc</span> <a href="https://forms.gle/78wpggURGADCjshr7" target="_blank" rel="noopener">đăng ký key</a>';
   const p = it.suggestBNB ?? it.best?.priceBNB ?? '';
   return `<input type="number" min="0" step="0.0001" style="width:90px" value="${esc(p === '' ? '' : bnb(p, 4))}" data-lprice> BNB <button class="primary" data-list="${esc(h.contract)}" data-tid="${esc(it.tokenId)}" data-lname="${esc(h.name || 'NFT')}">Đăng bán</button>`;
 }
