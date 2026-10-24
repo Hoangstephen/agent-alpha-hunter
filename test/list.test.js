@@ -209,11 +209,30 @@ test('findMarkets: nhận ra hợp đồng chợ từ giao dịch chuyển NFT, 
     getBlockNumber: async () => 1000,
     getLogs: async () => logs,
     getCode: async (a) => (a.toLowerCase() === MARKET ? '0x6080' : '0x'),
-    getTransaction: async (h) => ({ to: h.endsWith('4') ? NFT2 : MARKET, data: h.endsWith('4') ? '0x23b872dd' + '00'.repeat(96) : '0xabcdef01' + '00'.repeat(64) }),
+    call: async () => '0x',
+    getTransaction: async (h) => ({ from: sellers[0], value: 0n, to: h.endsWith('4') ? NFT2 : MARKET, data: h.endsWith('4') ? '0x23b872dd' + '00'.repeat(96) : '0xabcdef01' + '00'.repeat(64) }),
   };
   const r = await findMarkets(provider, NFT2, { fetchFn: async () => ({ ok: false }) });
   assert.equal(r.length, 1);
   assert.equal(r[0].address.toLowerCase(), MARKET);
   assert.equal(r[0].sales, 3);
   assert.equal(r[0].sellers, 3);
+});
+
+test('trustOf: chỉ tin chợ có cùng chủ (owner) với hợp đồng NFT; adaptSell thay đúng số token + ví', async () => {
+  const { trustOf, adaptSell } = await import('../src/markets.js');
+  const OI = new Interface(['function owner() view returns (address)']);
+  const TEAM = '0x00000000000000000000000000000000000000c1';
+  const owners = (m) => ({ call: async ({ to }) => coder.encode(['address'], [m[to.toLowerCase()] ?? m[to] ?? ZeroAddress]) });
+  const MK = '0x7777777777777777777777777777777777777777';
+  assert.equal((await trustOf(owners({ [NFT]: TEAM, [MK]: TEAM }), NFT, MK)).why, 'same-owner');
+  assert.equal(await trustOf(owners({ [NFT]: TEAM, [MK]: '0x00000000000000000000000000000000000000d1' }), NFT, MK), null); // khác chủ: drainer / chợ lạ
+  assert.equal(await trustOf(owners({}), NFT, MK), null); // cả hai đã bỏ quyền chủ (0x0): không đủ bằng chứng
+  const seller = '0x00000000000000000000000000000000000000a1';
+  const sel = '0x12345678';
+  const sample = { seller, tokenId: '20', data: sel + [5n, 20n].map((v) => v.toString(16).padStart(64, '0')).join('') + seller.slice(2).padStart(64, '0') };
+  const out = adaptSell(sample, { me: MAKER, tokenId: '3167' });
+  assert.equal(out, sel + (5n).toString(16).padStart(64, '0') + (3167n).toString(16).padStart(64, '0') + MAKER.toLowerCase().slice(2).padStart(64, '0'));
+  // Số token xuất hiện 2 lần: không chắc vị trí, bỏ.
+  assert.equal(adaptSell({ ...sample, data: sel + [20n, 20n].map((v) => v.toString(16).padStart(64, '0')).join('') }, { me: MAKER, tokenId: '1' }), null);
 });

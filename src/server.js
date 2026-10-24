@@ -17,6 +17,7 @@ import { Ledger } from './ledger.js';
 import { bnbUsdt } from './price.js';
 import { sellReport } from './sell.js';
 import { lpLock } from './lp.js';
+import { findMarkets, findInstantSell, approveMarketData, marketApproved, previewMarketCall } from './markets.js';
 import { buildListing, checkListing, signListing, postListing, previewApproveElement, elementApi } from './list.js';
 import { autoSellConfig, saveAutoSell, autoSellTick, listedMap, markListed, mintCostBNB, suggestPrice } from './autosell.js';
 import { webRules, projectPage, translateTo } from './rules.js';
@@ -171,6 +172,42 @@ const api = {
     writeFileSync('data/element.json', JSON.stringify({ key }));
     cfg.elementKey = key;
     return { ok: true, saved: true };
+  },
+  // Bán ngay trên chợ riêng của dự án (chỉ chợ có cùng chủ với hợp đồng NFT). Bước 1: preview.
+  'POST /api/market/preview': async ({ contract, tokenId, market }) => {
+    const w = walletInfo();
+    if (!w.connected) return { ok: false, error: w.hint };
+    if (!isAddress(contract) || !isAddress(market) || !/^\d{1,78}$/.test(String(tokenId))) return { ok: false, error: 'Dữ liệu không hợp lệ' };
+    const m = (await findMarkets(state.provider, contract)).find((x) => x.address.toLowerCase() === market.toLowerCase());
+    if (!m) return { ok: false, error: 'Không thấy chợ này trong các giao dịch gần đây của bộ NFT' };
+    if (!m.trust) return { ok: false, error: 'Chợ này không chứng minh được là của chính dự án (khác chủ với hợp đồng NFT): bot không cấp quyền. Bán trên web của chợ nếu bạn tin nó.' };
+    const id = randomUUID();
+    const base = { market: m.address, site: m.site, owner: m.trust.owner, contract, tokenId: String(tokenId) };
+    if (!(await marketApproved(state.provider, contract, w.address, m.address))) {
+      const pv = previewMarketCall(cfg, w.address, contract, approveMarketData(m.address));
+      if (!pv.ok) return pv;
+      state.pending.set(id, { kind: 'mk-approve', requestId: pv.requestId, contract, market: m.address, at: Date.now() });
+      return { ok: true, step: 'approve', id, ...base, risks: pv.risks, needsAppApproval: pv.requireConfirmation };
+    }
+    const sell = await findInstantSell(state.provider, m, { me: w.address, tokenId });
+    if (!sell) return { ok: false, error: 'Chưa có lệnh mua (offer) nào trên chợ này nhận NFT của bạn lúc này. Mở web của chợ để đặt giá bán, hoặc thử lại sau.', site: m.site };
+    const pv = previewMarketCall(cfg, w.address, m.address, sell.data);
+    if (!pv.ok) return pv;
+    if (pv.extraPerms) return { ok: false, error: 'Giao dịch bán này kèm cấp thêm quyền cho bên khác: đã chặn.', risks: pv.risks };
+    state.pending.set(id, { kind: 'mk-sell', requestId: pv.requestId, contract, tokenId: String(tokenId), market: m.address, at: Date.now() });
+    return { ok: true, step: 'sell', id, ...base, changes: pv.changes, risks: pv.risks, sample: sell.sample, needsAppApproval: pv.requireConfirmation };
+  },
+  'POST /api/market/execute': async ({ id }) => {
+    const p = state.pending.get(id);
+    state.pending.delete(id);
+    if (!p || Date.now() - p.at > PREVIEW_TTL_MS || !String(p.kind).startsWith('mk-')) return { ok: false, error: 'Lệnh đã hết hạn, bấm Bán ngay lại.' };
+    const r = executeApprove(p.requestId); // cùng lệnh contract-call execute
+    if (!r.ok) return r;
+    if (!r.txHash) return { ok: true, next: 'retry', message: 'Duyệt giao dịch trong app Binance, rồi bấm lại.' };
+    log(`[bán] ${p.kind === 'mk-approve' ? `cấp quyền chợ ${p.market} cho ${p.contract}` : `bán ${p.contract} #${p.tokenId} trên chợ ${p.market}`}: ${r.txHash}`);
+    const done = await waitReceipt(state.provider, r.txHash, { timeoutMs: 60_000 });
+    if (p.kind === 'mk-approve') return done ? { ok: true, next: 'sell' } : { ok: false, error: 'Cấp quyền chưa được xác nhận trên chain, thử lại sau ít phút.' };
+    return { ok: true, txHash: r.txHash, confirmed: done };
   },
   // LP của token có bị khoá/đốt không (pool PancakeSwap V2).
   'POST /api/lp': async ({ token, quote }) => {
@@ -374,7 +411,7 @@ const api = {
   },
   // Bước 2: bạn bấm "Xác nhận" trong hộp thoại.
   'POST /api/execute': async ({ id }) => {
-    if (String(state.pending.get(id)?.kind).startsWith('list')) return { ok: false, error: 'Sai loại lệnh' };
+    if (/^(list|mk-)/.test(String(state.pending.get(id)?.kind))) return { ok: false, error: 'Sai loại lệnh' };
     const p = state.pending.get(id);
     state.pending.delete(id);
     if (!p || Date.now() - p.at > PREVIEW_TTL_MS) return { ok: false, error: 'Preview đã hết hạn, bấm Mint lại.' };
