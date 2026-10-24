@@ -62,6 +62,25 @@ export class MultiRpc {
     this.li = 0;
     this.lp = this.factory(this.logUrls[0]); this.lpUrl = this.logUrls[this.li];
     this.timeoutMs = 15_000;
+    this.customDownAt = 0; // lúc RPC riêng lỗi gần nhất: dùng tạm RPC công khai 60 giây rồi quay lại
+  }
+
+  // RPC riêng luôn là RPC chính. Lỗi thì đổi tạm sang RPC công khai, hết 60 giây quay lại RPC riêng.
+  backToCustom() {
+    if (!this.custom || Date.now() - this.customDownAt < 60_000) return;
+    if (this.url !== this.custom && this.urls.includes(this.custom)) {
+      this.i = this.urls.indexOf(this.custom); this.p = this.factory(this.custom);
+      this.log(`[rpc] quay lại RPC riêng ${new URL(this.custom).host}`);
+    }
+    if (this.logsUrl !== this.custom && this.logUrls.includes(this.custom)) {
+      this.li = this.logUrls.indexOf(this.custom); this.lp = this.factory(this.custom); this.lpUrl = this.custom;
+    }
+  }
+
+  markDown(u, e) {
+    if (u !== this.custom) return;
+    if (Date.now() - this.customDownAt > 60_000) this.log(`[rpc] RPC riêng ${new URL(u).host} lỗi (${(e?.shortMessage || e?.message || '').slice(0, 80)}), dùng tạm RPC công khai 60 giây`);
+    this.customDownAt = Date.now();
   }
 
   get url() { return this.urls[this.i]; }
@@ -83,13 +102,16 @@ export class MultiRpc {
 
   async run(fn) {
     let last;
+    this.backToCustom();
     for (let n = 0; n < this.urls.length; n++) {
+      const u = this.url;
       try {
         // RPC công khai đôi khi treo: quá 15 giây coi như lỗi mạng và đổi RPC.
         return await withTimeout(fn(this.p), this.timeoutMs);
       } catch (e) {
         if (!isRpcError(e) || isRangeError(e)) throw e;
         last = e;
+        this.markDown(u, e);
         this.rotate();
       }
     }
@@ -101,6 +123,7 @@ export class MultiRpc {
   // RPC không tồn tại (ENOTFOUND) hoặc lỗi 5 lần liền: loại khỏi danh sách lấy log.
   async getLogs(f) {
     let last;
+    this.backToCustom();
     const tries = Math.min(4, this.logUrls.length);
     for (let n = 0; n < tries; n++) {
       const p = this.lp;
@@ -112,6 +135,7 @@ export class MultiRpc {
       } catch (e) {
         if (isRangeError(e)) throw e;
         last = e;
+        this.markDown(u, e);
         const k = (this.fails.get(u) ?? 0) + 1;
         this.fails.set(u, k);
         if ((k >= 5 || /ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(`${e.message} ${e.code}`)) && u !== this.custom && this.logUrls.length > 1 && this.logUrls.includes(u)) {
@@ -153,17 +177,31 @@ export class MultiRpc {
     const rank = (a, b, k) => (a.u === this.urls[0] ? -1 : b.u === this.urls[0] ? 1 : a[k] - b[k]);
     const read = [...res].sort((a, b) => rank(a, b, 'readMs'));
     this.urls = [...read.map((r) => r.u), ...this.urls.filter((u) => !read.some((r) => r.u === u))];
-    this.i = 0;
-    this.p = read[0].p;
+    const customOk = this.custom && read.some((r) => r.u === this.custom);
+    if (this.custom && !customOk) {
+      // RPC riêng không trả lời lúc khởi động: vẫn giữ đầu danh sách, dùng tạm RPC công khai rồi thử lại sau 60 giây.
+      this.urls = [this.custom, ...this.urls.filter((u) => u !== this.custom)];
+      this.i = 1 % this.urls.length;
+      this.p = this.factory(this.urls[this.i]);
+      this.customDownAt = Date.now();
+      this.log(`[rpc] ⚠ RPC riêng ${new URL(this.custom).host} không trả lời lúc khởi động. Dùng tạm RPC công khai, 60 giây sau thử lại.`);
+    } else {
+      this.i = 0;
+      this.p = read[0].p;
+    }
     // RPC riêng đã được kiểm tra lúc lưu: giữ đầu danh sách lấy log kể cả khi lần thử này chậm.
     const logs = res.filter((r) => r.logsMs != null || (this.custom && r.u === this.custom)).sort((a, b) => rank(a, b, 'logsMs'));
     if (logs.length) {
       this.logUrls = logs.map((r) => r.u);
-      this.li = 0;
-      this.lp = logs[0].p; this.lpUrl = this.logUrls[this.li];
+      if (this.custom && !this.logUrls.includes(this.custom)) this.logUrls.unshift(this.custom);
+      this.li = this.custom && !customOk ? Math.min(1, this.logUrls.length - 1) : 0;
+      this.lpUrl = this.logUrls[this.li];
+      this.lp = logs.find((r) => r.u === this.lpUrl)?.p ?? this.factory(this.lpUrl);
     } else {
       this.log('[rpc] cảnh báo: không RPC công khai nào trả log lúc này, việc tìm NFT có thể thiếu. Nên đặt BSC_RPC_URL riêng.');
     }
+    if (this.custom) this.log(`[rpc] RPC riêng: ${new URL(this.custom).host} ${customOk ? '✓ đang dùng (đọc hợp đồng + lấy log)' : '✗ chưa trả lời'}`);
+    else this.log('[rpc] chưa có RPC riêng (data/rpc.json trống): đang dùng RPC công khai. Dán link NodeReal ở mục ⚙ RPC riêng.');
     this.log(`[rpc] đọc hợp đồng: ${this.url} · lấy log: ${this.logsUrl} (${logs.length} RPC lấy log được)`);
     return this;
   }

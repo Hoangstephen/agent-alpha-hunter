@@ -529,3 +529,20 @@ test('profitBNB: giá vốn là giá ví bạn trả, không phải giá ngườ
   assert.equal(profitIfFreeBNB({ ...n, priceBNB: 0 }), null);
   assert.equal(profitBNB({ ...n, sales: { count: 0 } }), null);
 });
+
+test('RPC riêng: lỗi thì dùng tạm RPC công khai, 60 giây sau quay lại RPC riêng', async () => {
+  let down = true;
+  const factory = (u) => ({
+    getBlockNumber: async () => { if (u === 'https://mine' && down) throw new Error('timeout'); return u === 'https://mine' ? 2 : 1; },
+    getLogs: async () => { if (u === 'https://mine' && down) throw new Error('timeout'); return [{ u }]; },
+  });
+  const lines = [];
+  const m = await new MultiRpc(['https://mine', 'https://pub'], { factory, log: (l) => lines.push(l), custom: 'https://mine' }).init();
+  assert.equal(m.urls[0], 'https://mine');
+  assert.equal(await m.getBlockNumber(), 1);
+  assert.ok(lines.some((l) => l.includes('RPC riêng mine')), lines.join('\n'));
+  down = false;
+  m.customDownAt = Date.now() - 61_000;
+  assert.equal(await m.getBlockNumber(), 2);
+  assert.equal((await m.getLogs({}))[0].u, 'https://mine');
+});

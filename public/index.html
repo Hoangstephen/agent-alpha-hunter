@@ -320,7 +320,7 @@ async function refresh() {
   rate = s.bnbUsdt;
   $('price').textContent = rate ? `1 BNB ≈ ${rate.toLocaleString('en-US', { maximumFractionDigits: 2 })} USDT (${s.priceSource})` : '1 BNB ≈ ? USDT';
   if (rateChanged) shownScan = null;
-  $('rpc').textContent = 'RPC: ' + (s.rpc ? new URL(s.rpc).host + (s.customRpc ? ' (riêng)' : '') : '…') + (s.logsRpc && s.logsRpc !== s.rpc ? ' · log: ' + new URL(s.logsRpc).host : '');
+  $('rpc').textContent = 'RPC: ' + (s.rpc ? new URL(s.rpc).host + (s.customRpc ? ' (riêng)' : '') : '…') + (s.logsRpc && s.logsRpc !== s.rpc ? ' · log: ' + new URL(s.logsRpc).host : '') + (s.customRpc ? '' : ' · ⚠ chưa có RPC riêng');
   $('spent').textContent = `Đã chi hôm nay: ${s.spentTodayBNB} / ${s.limits.maxDailyBNB} BNB ${usd(s.limits.maxDailyBNB) ? '(trần ' + usd(s.limits.maxDailyBNB) + ')' : ''}`;
   $('log').textContent = s.logs.join('\n');
   $('scanBtn').disabled = s.scanning;
