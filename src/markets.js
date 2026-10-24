@@ -25,12 +25,14 @@ export async function trustOf(provider, nft, market) {
 }
 
 const cache = new Map();
-export async function findMarkets(provider, nft, { blocks = 200_000, chunk = 5000, deadlineMs = 25_000, maxTx = 40, fetchFn } = {}) {
+export async function findMarkets(provider, nft, { blocks = 200_000, chunk = 5000, deadlineMs = 25_000, maxTx = 40, fetchFn, logs } = {}) {
   nft = getAddress(nft);
   const hit = cache.get(nft);
   if (hit && Date.now() - hit.at < 10 * 60_000) return hit.v;
-  const head = await provider.getBlockNumber();
-  const logs = await getLogsChunked(provider, { address: nft, topics: [TOPIC.TRANSFER] }, Math.max(0, head - blocks), head, chunk, { concurrency: 6, deadlineMs });
+  if (!logs) {
+    const head = await provider.getBlockNumber();
+    logs = await getLogsChunked(provider, { address: nft, topics: [TOPIC.TRANSFER] }, Math.max(0, head - blocks), head, chunk, { concurrency: 6, deadlineMs });
+  }
   const byTx = new Map();
   for (const l of logs) {
     if (l.topics.length !== 4 || l.topics[1] === TOPIC.ZERO) continue; // bỏ mint và ERC-20
@@ -63,7 +65,7 @@ export async function findMarkets(provider, nft, { blocks = 200_000, chunk = 500
     r.trust = k ? null : await trustOf(provider, nft, r.address).catch(() => null);
   });
   const v = out.filter((r) => r.isContract);
-  cache.set(nft, { at: Date.now(), v });
+  if (v.length) cache.set(nft, { at: Date.now(), v }); // không nhớ kết quả rỗng (có thể do RPC lỗi lần này)
   return v;
 }
 

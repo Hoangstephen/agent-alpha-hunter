@@ -17,7 +17,7 @@ import { Ledger } from './ledger.js';
 import { bnbUsdt } from './price.js';
 import { sellReport } from './sell.js';
 import { lpLock } from './lp.js';
-import { findMarkets, findInstantSell, approveMarketData, marketApproved, previewMarketCall, learnMarket, findListCall } from './markets.js';
+import { findMarkets, trustOf, findInstantSell, approveMarketData, marketApproved, previewMarketCall, learnMarket, findListCall } from './markets.js';
 import { buildListing, checkListing, signListing, postListing, previewApproveElement, elementApi } from './list.js';
 import { autoSellConfig, saveAutoSell, autoSellTick, listedMap, markListed, mintCostBNB, suggestPrice } from './autosell.js';
 import { webRules, projectPage, translateTo } from './rules.js';
@@ -178,8 +178,15 @@ const api = {
     const w = walletInfo();
     if (!w.connected) return { ok: false, error: w.hint };
     if (!isAddress(contract) || !isAddress(market) || !/^\d{1,78}$/.test(String(tokenId))) return { ok: false, error: 'Dữ liệu không hợp lệ' };
-    const m = (await findMarkets(state.provider, contract)).find((x) => x.address.toLowerCase() === market.toLowerCase());
-    if (!m) return { ok: false, error: 'Không thấy chợ này trong các giao dịch gần đây của bộ NFT' };
+    let m = (await findMarkets(state.provider, contract).catch(() => [])).find((x) => x.address.toLowerCase() === market.toLowerCase());
+    if (!m) {
+      // RPC lỗi lượt này: dùng chợ đã thấy lần trước, kiểm tra lại "cùng chủ" ngay trên chain.
+      let c = {};
+      try { c = JSON.parse(readFileSync('data/sell-cache.json', 'utf8')); } catch {}
+      const old = (c[contract.toLowerCase()]?.markets ?? []).find((x) => x.address.toLowerCase() === market.toLowerCase());
+      if (old) m = { ...old, trust: await trustOf(state.provider, contract, old.address).catch(() => null) };
+    }
+    if (!m) return { ok: false, error: 'Không thấy chợ này trong các giao dịch gần đây của bộ NFT. Bấm Tìm giá bán cao nhất lại.' };
     if (!m.trust) return { ok: false, error: 'Chợ này không chứng minh được là của chính dự án (khác chủ với hợp đồng NFT): bot không cấp quyền. Bán trên web của chợ nếu bạn tin nó.' };
     const id = randomUUID();
     const base = { market: m.address, site: m.site, owner: m.trust.owner, contract, tokenId: String(tokenId) };

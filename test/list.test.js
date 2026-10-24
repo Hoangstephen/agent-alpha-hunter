@@ -269,3 +269,32 @@ test('learnMarket: học "đặt giá bán" và "bán vào lệnh mua" từ log 
   const out = adaptList(v.listSamples[0], { me: MAKER, tokenId: 3167n, priceWei: pe('0.005') });
   assert.equal(out, '0xaaaaaaaa' + A(COL) + W(3167) + W(pe('0.005')));
 });
+
+test('sellReport: RPC lỗi lần này thì dùng lại giá bán + chợ của lần trước, không báo "chưa ai bán"', async () => {
+  const { sellReport } = await import('../src/sell.js');
+  const { writeFileSync, mkdtempSync } = await import('node:fs');
+  const dir = mkdtempSync(join(tmpdir(), 'sc-'));
+  const C = '0x2D70000000000000000000000000000000003103';
+  const path = join(dir, 'sell-cache.json');
+  writeFileSync(path, JSON.stringify({ [C.toLowerCase()]: { at: Date.now() - 3600_000, sales: { count: 4, maxBNB: 0.001, medianBNB: 0.001 }, markets: [{ address: '0x149b000000000000000000000000000000004887', sales: 4, sellers: 4 }] } }));
+  const I = new Interface(['function balanceOf(address) view returns (uint256)', 'function tokenOfOwnerByIndex(address,uint256) view returns (uint256)', 'function name() view returns (string)']);
+  const provider = {
+    getBlockNumber: async () => 1_000_000,
+    getLogs: async () => { throw new Error('rate limited'); },
+    getCode: async () => '0x',
+    async call({ data }) {
+      const f = (() => { try { return I.parseTransaction({ data }); } catch { return null; } })();
+      if (f?.name === 'balanceOf') return coder.encode(['uint256'], [1n]);
+      if (f?.name === 'tokenOfOwnerByIndex') return coder.encode(['uint256'], [3167n]);
+      if (f?.name === 'name') return coder.encode(['string'], ['Agent Nakamigos Id']);
+      throw new Error('revert');
+    },
+  };
+  const r = await sellReport(provider, { scan: {} }, MAKER, [C], { cachePath: join(dir, 'w.json'), sellCachePath: path });
+  const h = r.holdings[0];
+  assert.equal(h.sales.count, 4);
+  assert.ok(h.salesCached);
+  assert.equal(h.markets.length, 1);
+  assert.equal(h.items[0].best.priceBNB, 0.001);
+  rmSync(dir, { recursive: true, force: true });
+});

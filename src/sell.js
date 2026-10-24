@@ -202,9 +202,11 @@ export async function mintStats(provider, mintTxs, { bnbUsdt } = {}) {
   };
 }
 
-export async function recentSales(provider, contract, { blocks = 6000, chunk = 2000, maxTx = 25, bnbUsdt, deadlineMs = 60_000 } = {}) {
-  const head = await provider.getBlockNumber();
-  const logs = await getLogsChunked(provider, { address: contract, topics: [TOPIC.TRANSFER] }, head - blocks, head, chunk, { concurrency: 6, deadlineMs });
+export async function recentSales(provider, contract, { blocks = 6000, chunk = 2000, maxTx = 25, bnbUsdt, deadlineMs = 60_000, logs } = {}) {
+  if (!logs) {
+    const head = await provider.getBlockNumber();
+    logs = await getLogsChunked(provider, { address: contract, topics: [TOPIC.TRANSFER] }, head - blocks, head, chunk, { concurrency: 6, deadlineMs });
+  }
   const byTx = new Map();
   for (const l of logs) {
     if (l.topics.length !== 4 || l.topics[1] === TOPIC.ZERO) continue; // bỏ mint và ERC-20
@@ -253,7 +255,7 @@ export async function elementOffers(cfg, wallet, fetchFn = fetch) {
   return { enabled: true, offers };
 }
 
-export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, log, cachePath, mintTxs = [] } = {}) {
+export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, log, cachePath, mintTxs = [], sellCachePath = 'data/sell-cache.json' } = {}) {
   const [received, fromTxs] = await Promise.all([
     receivedNfts(provider, wallet, { chunk: cfg.scan.chunkByAddress ?? 2000, log, cachePath }).catch(() => new Map()),
     idsFromTxs(provider, wallet, mintTxs).catch(() => new Map()),
@@ -264,15 +266,29 @@ export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, lo
   let element = { enabled: false, offers: new Map() };
   try { element = await elementOffers(cfg, wallet); } catch (e) { element.error = e.message; }
 
-  await mapLimit(holdings, 3, async (h) => {
+  // Kết quả tốt gần nhất mỗi bộ NFT (giá bán + chợ), dùng khi RPC lỗi lượt này.
+  let sellCache = {};
+  try { sellCache = JSON.parse(readFileSync(sellCachePath, 'utf8')); } catch {}
+  await mapLimit(holdings, 2, async (h) => {
     // Giá bán trong ~1,5 ngày gần nhất (BSC ~0,75 giây/block), lọc theo hợp đồng nên RPC chịu được đoạn lớn.
     // Web dự án: nhiều dự án có chợ riêng và cho kết nối thẳng ví Agentic (Element thì không).
-    // Chợ riêng của bộ NFT: đọc từ các giao dịch chuyển NFT gần đây (không cần Element API key).
-    [h.site, h.markets] = await Promise.all([
+    // Log chuyển NFT ~1,5 ngày gần nhất: đọc 1 lần, dùng chung cho giá bán gần đây và tìm chợ riêng của bộ NFT.
+    const head = await provider.getBlockNumber();
+    const logs = await getLogsChunked(provider, { address: h.contract, topics: [TOPIC.TRANSFER] }, head - 180_000, head, 5000, { concurrency: 6, deadlineMs: 30_000 }).catch(() => null);
+    [h.site, h.markets, h.sales] = await Promise.all([
       Promise.race([projectPage(provider, h.contract).then((p) => p.site).catch(() => null), new Promise((r) => setTimeout(() => r(null), 8000))]),
-      Promise.race([findMarkets(provider, h.contract, { chunk: 5000 }).catch(() => []), new Promise((r) => setTimeout(() => r([]), 30_000))]),
+      logs ? Promise.race([findMarkets(provider, h.contract, { logs }).catch(() => []), new Promise((r) => setTimeout(() => r([]), 30_000))]) : [],
+      logs ? recentSales(provider, h.contract, { logs, bnbUsdt }).catch(() => ({ count: 0 })) : { count: 0 },
     ]);
-    h.sales = await recentSales(provider, h.contract, { blocks: 180_000, chunk: 5000, bnbUsdt, deadlineMs: 25_000 }).catch(() => ({ count: 0 }));
+    // RPC lỗi / đọc thiếu lần này: dùng lại kết quả tốt gần nhất (tối đa 24 giờ), không báo nhầm "chưa ai bán".
+    const prev = sellCache[h.contract.toLowerCase()];
+    const fresh = prev && Date.now() - prev.at < 86400_000;
+    if (!h.sales?.count && fresh && prev.sales?.count) Object.assign(h, { sales: prev.sales, salesCached: prev.at });
+    if (!h.markets?.length && fresh && prev.markets?.length) Object.assign(h, { markets: prev.markets, marketsCached: prev.at });
+    h.logsIncomplete = !logs || Boolean(logs.incomplete);
+    const newSales = !h.salesCached && h.sales?.count;
+    const newMarkets = !h.marketsCached && h.markets?.length;
+    if (newSales || newMarkets) sellCache[h.contract.toLowerCase()] = { at: Date.now(), sales: newSales ? h.sales : prev?.sales, markets: newMarkets ? h.markets : prev?.markets };
     h.items = (h.tokenIds.length ? h.tokenIds : [null]).map((id) => {
       const offer = id != null ? element.offers.get(`${h.contract.toLowerCase()}:${id}`) : null;
       const options = [];
@@ -283,5 +299,6 @@ export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, lo
       return { tokenId: id, best: options[0] ?? null, options, elementUrl: id != null ? `https://element.market/assets/bsc/${h.contract}/${id}` : null };
     });
   });
+  try { mkdirSync(dirname(sellCachePath), { recursive: true }); writeFileSync(sellCachePath, JSON.stringify(sellCache, (_, v) => (typeof v === 'bigint' ? v.toString() : v))); } catch {}
   return { wallet, elementEnabled: element.enabled, elementError: element.error, holdings };
 }

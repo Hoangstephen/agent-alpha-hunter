@@ -598,11 +598,13 @@ $('sellBtn').onclick = async () => {
   $('sellBtn').disabled = false;
   if (!r.ok) { $('sell').innerHTML = `<div class="bad">${esc(r.error)}</div>`; return; }
   const rows = r.holdings.flatMap((h) => h.items.map((it) => ({ h, it })));
-  const fmt = (o) => o ? `<b>${esc(o.priceBNB.toFixed(5).replace(/\.?0+$/, ''))} BNB</b> <span class="muted">${esc(usd(o.priceBNB))}</span><br><span class="muted">${esc(o.venue)}</span>` : '<span class="muted">Chưa ai bán trong ~1,5 ngày qua: chưa có giá tham khảo, tự đặt giá khi đăng bán trên sàn</span>';
+  const fmt = (o, h) => o ? `<b>${esc(o.priceBNB.toFixed(5).replace(/\.?0+$/, ''))} BNB</b> <span class="muted">${esc(usd(o.priceBNB))}</span><br><span class="muted">${esc(o.venue)}${h.salesCached ? ` · số liệu lúc ${esc(new Date(h.salesCached).toLocaleTimeString())} (RPC lần này đọc lỗi)` : ''}</span>`
+    : h.logsIncomplete ? '<span class="warn">RPC chưa đọc được lịch sử giao dịch lần này. Bấm Tìm giá bán cao nhất lại (hoặc dùng RPC riêng).</span>'
+    : '<span class="muted">Chưa ai bán trong ~1,5 ngày qua: chưa có giá tham khảo, tự đặt giá khi đăng bán</span>';
   $('sell').innerHTML = (rows.length
     ? `<table><tr><th>NFT</th><th>Giá cao nhất tìm thấy</th><th>Đăng bán</th><th></th></tr>${rows.map(({ h, it }) => `<tr>
         <td>${esc(h.name || 'NFT')} ${it.tokenId != null ? '#' + esc(String(it.tokenId).length > 12 ? String(it.tokenId).slice(0, 6) + '…' + String(it.tokenId).slice(-4) : it.tokenId) : `(x${esc(h.balance)})`}<div class="addr">${esc(short(h.contract))}</div></td>
-        <td>${fmt(it.best)}</td>
+        <td>${fmt(it.best, h)}</td>
         <td>${listCell(r, h, it)}</td>
         <td>${marketLinks(h, it)}${h.site ? `<a href="${esc(h.site)}" target="_blank" rel="noopener"><b>Bán trên web dự án</b></a><br>` : ''}${it.elementUrl ? `<a href="${esc(it.elementUrl)}" target="_blank" rel="noopener">Xem trên Element</a><br>` : ''}<a href="https://bscscan.com/token/${esc(h.contract)}?a=${esc(r.wallet)}" target="_blank" rel="noopener">BscScan</a></td>
       </tr>`).join('')}</table>`
