@@ -92,6 +92,63 @@ export async function findInstantSell(provider, market, { me, tokenId }) {
   return null;
 }
 
+// Học từ log của CHỢ (không chỉ log của NFT): đọc giao dịch gần đây gửi vào chợ, chia 2 loại:
+// - bán vào lệnh mua: người gửi chuyển NFT của chính họ đi, không gửi kèm BNB  → sellSamples
+// - đặt giá bán: NFT không di chuyển, không kèm BNB, dữ liệu gọi hàm có đúng 1 số token của bộ NFT
+//   và đúng 1 số tiền (wei) cũng xuất hiện trong log của chợ (= giá vừa đặt)  → listSamples
+const learned = new Map();
+export async function learnMarket(provider, market, nft, { blocks = 120_000, chunk = 5000, deadlineMs = 25_000, maxTx = 60, maxSupply = 1_000_000n } = {}) {
+  const key = `${market}:${nft}`.toLowerCase();
+  const hit = learned.get(key);
+  if (hit && Date.now() - hit.at < 5 * 60_000) return hit.v;
+  const head = await provider.getBlockNumber();
+  const logs = await getLogsChunked(provider, { address: market }, Math.max(0, head - blocks), head, chunk, { concurrency: 6, deadlineMs });
+  const hashes = [...new Map(logs.map((l) => [l.transactionHash, l.blockNumber])).entries()].sort((a, b) => b[1] - a[1]).slice(0, maxTx).map(([h]) => h);
+  const nftW = pad(nft);
+  const v = { sellSamples: [], listSamples: [] };
+  await mapLimit(hashes, 5, async (hash) => {
+    const [tx, rc] = await Promise.all([provider.getTransaction(hash).catch(() => null), provider.getTransactionReceipt(hash).catch(() => null)]);
+    if (!tx?.to || tx.to.toLowerCase() !== market.toLowerCase() || BigInt(tx.value ?? 0n) !== 0n || !rc || Number(rc.status) !== 1) return;
+    const body = tx.data.slice(10).toLowerCase();
+    if (!body || body.length % 64) return;
+    const words = body.match(/.{64}/g);
+    const nftMoves = rc.logs.filter((l) => l.address.toLowerCase() === nft.toLowerCase() && l.topics[0] === TOPIC.TRANSFER && l.topics.length === 4);
+    const me = pad(tx.from);
+    if (nftMoves.length === 1 && nftMoves[0].topics[1].slice(2).toLowerCase() === me && nftMoves[0].topics[2].slice(2).toLowerCase() !== me) {
+      v.sellSamples.push({ hash, seller: tx.from, tokenId: BigInt(nftMoves[0].topics[3]).toString(), data: tx.data });
+      return;
+    }
+    if (nftMoves.length || !words.includes(nftW)) return; // đặt giá: NFT chưa di chuyển, gọi hàm có địa chỉ bộ NFT
+    const marketLogs = rc.logs.filter((l) => l.address.toLowerCase() === market.toLowerCase()).map((l) => (l.data + l.topics.join('')).toLowerCase());
+    const inLogs = (w) => marketLogs.some((x) => x.includes(w));
+    const ids = words.map((w, i) => ({ w, i, n: BigInt('0x' + w) })).filter((x) => x.w !== nftW && x.n < maxSupply && inLogs(x.w));
+    const prices = words.map((w, i) => ({ w, i, n: BigInt('0x' + w) })).filter((x) => x.n >= 10n ** 12n && x.n <= 10n ** 24n && inLogs(x.w));
+    if (ids.length !== 1 || prices.length !== 1) return; // không chắc vị trí: bỏ
+    v.listSamples.push({ hash, seller: tx.from, tokenId: ids[0].n.toString(), idIndex: ids[0].i, priceIndex: prices[0].i, priceWei: prices[0].n.toString(), data: tx.data });
+  });
+  learned.set(key, { at: Date.now(), v });
+  return v;
+}
+
+// Dựng lệnh "đặt giá bán" cho NFT của bạn từ 1 mẫu: thay số token, giá, địa chỉ người đặt mẫu.
+export function adaptList(s, { me, tokenId, priceWei }) {
+  const words = s.data.slice(10).toLowerCase().match(/.{64}/g) ?? [];
+  words[s.idIndex] = word(tokenId);
+  words[s.priceIndex] = word(priceWei);
+  return s.data.slice(0, 10).toLowerCase() + words.join('').split(pad(s.seller)).join(pad(me));
+}
+
+export async function findListCall(provider, market, samples, { me, tokenId, priceWei }) {
+  for (const s of samples) {
+    const data = adaptList(s, { me, tokenId, priceWei });
+    try {
+      await provider.call({ from: me, to: market, data, value: 0n });
+      return { data, sample: s.hash };
+    } catch {}
+  }
+  return null;
+}
+
 export const approveMarketData = (market) => nftI.encodeFunctionData('setApprovalForAll', [getAddress(market), true]);
 export async function marketApproved(provider, nft, owner, market) {
   try { return nftI.decodeFunctionResult('isApprovedForAll', await provider.call({ to: nft, data: nftI.encodeFunctionData('isApprovedForAll', [owner, market]) }))[0]; } catch { return false; }

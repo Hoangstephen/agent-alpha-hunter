@@ -5,7 +5,7 @@ import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { formatEther, formatUnits, Interface } from 'ethers';
+import { formatEther, formatUnits, Interface, parseEther } from 'ethers';
 import { loadConfig } from './config.js';
 import { connect, testRpc } from './chain.js';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
@@ -17,7 +17,7 @@ import { Ledger } from './ledger.js';
 import { bnbUsdt } from './price.js';
 import { sellReport } from './sell.js';
 import { lpLock } from './lp.js';
-import { findMarkets, findInstantSell, approveMarketData, marketApproved, previewMarketCall } from './markets.js';
+import { findMarkets, findInstantSell, approveMarketData, marketApproved, previewMarketCall, learnMarket, findListCall } from './markets.js';
 import { buildListing, checkListing, signListing, postListing, previewApproveElement, elementApi } from './list.js';
 import { autoSellConfig, saveAutoSell, autoSellTick, listedMap, markListed, mintCostBNB, suggestPrice } from './autosell.js';
 import { webRules, projectPage, translateTo } from './rules.js';
@@ -174,7 +174,7 @@ const api = {
     return { ok: true, saved: true };
   },
   // Bán ngay trên chợ riêng của dự án (chỉ chợ có cùng chủ với hợp đồng NFT). Bước 1: preview.
-  'POST /api/market/preview': async ({ contract, tokenId, market }) => {
+  'POST /api/market/preview': async ({ contract, tokenId, market, mode = 'sell', priceBNB }) => {
     const w = walletInfo();
     if (!w.connected) return { ok: false, error: w.hint };
     if (!isAddress(contract) || !isAddress(market) || !/^\d{1,78}$/.test(String(tokenId))) return { ok: false, error: 'Dữ liệu không hợp lệ' };
@@ -189,13 +189,22 @@ const api = {
       state.pending.set(id, { kind: 'mk-approve', requestId: pv.requestId, contract, market: m.address, at: Date.now() });
       return { ok: true, step: 'approve', id, ...base, risks: pv.risks, needsAppApproval: pv.requireConfirmation };
     }
-    const sell = await findInstantSell(state.provider, m, { me: w.address, tokenId });
-    if (!sell) return { ok: false, error: 'Chưa có lệnh mua (offer) nào trên chợ này nhận NFT của bạn lúc này. Mở web của chợ để đặt giá bán, hoặc thử lại sau.', site: m.site };
-    const pv = previewMarketCall(cfg, w.address, m.address, sell.data);
+    const learnedM = await learnMarket(state.provider, m.address, contract).catch(() => ({ sellSamples: [], listSamples: [] }));
+    let call;
+    if (mode === 'list') {
+      if (!/^\d{1,6}(\.\d{1,18})?$/.test(String(priceBNB)) || Number(priceBNB) <= 0) return { ok: false, error: 'Nhập giá bán (BNB)' };
+      if (!learnedM.listSamples.length) return { ok: false, error: 'Bot chưa thấy ai đặt giá bán trên chợ này gần đây nên chưa học được cách đặt. Đặt giá trên web của chợ, hoặc thử lại sau.', site: m.site };
+      call = await findListCall(state.provider, m.address, learnedM.listSamples, { me: w.address, tokenId, priceWei: parseEther(String(priceBNB)) });
+      if (!call) return { ok: false, error: 'Chợ từ chối lệnh đặt giá khi mô phỏng (có thể NFT đang được rao bán rồi, hoặc chợ đã đổi cách đặt). Thử trên web của chợ.', site: m.site };
+    } else {
+      call = await findInstantSell(state.provider, { ...m, sellSamples: [...learnedM.sellSamples, ...(m.sellSamples ?? [])] }, { me: w.address, tokenId });
+      if (!call) return { ok: false, error: 'Chưa có lệnh mua (offer) nào trên chợ nhận được NFT này lúc này: lệnh mua có thể chỉ dành cho số token khác hoặc đã có người bán vào. Dùng "Đặt giá bán" để rao bán thay.', site: m.site };
+    }
+    const pv = previewMarketCall(cfg, w.address, m.address, call.data);
     if (!pv.ok) return pv;
-    if (pv.extraPerms) return { ok: false, error: 'Giao dịch bán này kèm cấp thêm quyền cho bên khác: đã chặn.', risks: pv.risks };
-    state.pending.set(id, { kind: 'mk-sell', requestId: pv.requestId, contract, tokenId: String(tokenId), market: m.address, at: Date.now() });
-    return { ok: true, step: 'sell', id, ...base, changes: pv.changes, risks: pv.risks, sample: sell.sample, needsAppApproval: pv.requireConfirmation };
+    if (pv.extraPerms) return { ok: false, error: 'Giao dịch này kèm cấp thêm quyền cho bên khác: đã chặn.', risks: pv.risks };
+    state.pending.set(id, { kind: mode === 'list' ? 'mk-list' : 'mk-sell', requestId: pv.requestId, contract, tokenId: String(tokenId), market: m.address, at: Date.now() });
+    return { ok: true, step: mode === 'list' ? 'list' : 'sell', id, ...base, priceBNB: mode === 'list' ? Number(priceBNB) : null, changes: pv.changes, risks: pv.risks, sample: call.sample, needsAppApproval: pv.requireConfirmation };
   },
   'POST /api/market/execute': async ({ id }) => {
     const p = state.pending.get(id);
@@ -204,10 +213,10 @@ const api = {
     const r = executeApprove(p.requestId); // cùng lệnh contract-call execute
     if (!r.ok) return r;
     if (!r.txHash) return { ok: true, next: 'retry', message: 'Duyệt giao dịch trong app Binance, rồi bấm lại.' };
-    log(`[bán] ${p.kind === 'mk-approve' ? `cấp quyền chợ ${p.market} cho ${p.contract}` : `bán ${p.contract} #${p.tokenId} trên chợ ${p.market}`}: ${r.txHash}`);
+    log(`[bán] ${p.kind === 'mk-approve' ? `cấp quyền chợ ${p.market} cho ${p.contract}` : `${p.kind === 'mk-list' ? 'đặt giá bán' : 'bán'} ${p.contract} #${p.tokenId} trên chợ ${p.market}`}: ${r.txHash}`);
     const done = await waitReceipt(state.provider, r.txHash, { timeoutMs: 60_000 });
     if (p.kind === 'mk-approve') return done ? { ok: true, next: 'sell' } : { ok: false, error: 'Cấp quyền chưa được xác nhận trên chain, thử lại sau ít phút.' };
-    return { ok: true, txHash: r.txHash, confirmed: done };
+    return { ok: true, txHash: r.txHash, confirmed: done, kind: p.kind };
   },
   // LP của token có bị khoá/đốt không (pool PancakeSwap V2).
   'POST /api/lp': async ({ token, quote }) => {

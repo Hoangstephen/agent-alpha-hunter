@@ -236,3 +236,36 @@ test('trustOf: chỉ tin chợ có cùng chủ (owner) với hợp đồng NFT; 
   // Số token xuất hiện 2 lần: không chắc vị trí, bỏ.
   assert.equal(adaptSell({ ...sample, data: sel + [20n, 20n].map((v) => v.toString(16).padStart(64, '0')).join('') }, { me: MAKER, tokenId: '1' }), null);
 });
+
+test('learnMarket: học "đặt giá bán" và "bán vào lệnh mua" từ log của chợ; adaptList thay số token + giá + ví', async () => {
+  const { learnMarket, adaptList } = await import('../src/markets.js');
+  const { TOPIC } = await import('../src/chain.js');
+  const { zeroPadValue, parseEther: pe } = await import('ethers');
+  const MK = '0x8888888888888888888888888888888888888888';
+  const COL = '0x9999999999999999999999999999999999999999';
+  const W = (v) => BigInt(v).toString(16).padStart(64, '0');
+  const A = (a) => a.slice(2).toLowerCase().padStart(64, '0');
+  const LISTER = '0x00000000000000000000000000000000000000b1';
+  const SELLER = '0x00000000000000000000000000000000000000b2';
+  const BUYER = '0x00000000000000000000000000000000000000b3';
+  const listData = '0xaaaaaaaa' + A(COL) + W(44) + W(pe('0.002'));
+  const sellData = '0xbbbbbbbb' + W(1) + W(20);
+  const txs = {
+    ['0x' + '1'.padStart(64, '0')]: { tx: { from: LISTER, to: MK, value: 0n, data: listData }, rc: { status: 1, logs: [{ address: MK, topics: ['0x' + 'e'.repeat(64), zeroPadValue(LISTER, 32)], data: '0x' + W(44) + W(pe('0.002')) }] } },
+    ['0x' + '2'.padStart(64, '0')]: { tx: { from: SELLER, to: MK, value: 0n, data: sellData }, rc: { status: 1, logs: [{ address: COL, topics: [TOPIC.TRANSFER, zeroPadValue(SELLER, 32), zeroPadValue(BUYER, 32), '0x' + W(20)], data: '0x' }] } },
+  };
+  const provider = {
+    getBlockNumber: async () => 1000,
+    getLogs: async () => Object.keys(txs).map((h, i) => ({ address: MK, transactionHash: h, blockNumber: 900 + i, topics: [], data: '0x' })),
+    getTransaction: async (h) => txs[h].tx,
+    getTransactionReceipt: async (h) => txs[h].rc,
+  };
+  const v = await learnMarket(provider, MK, COL);
+  assert.equal(v.listSamples.length, 1);
+  assert.equal(v.listSamples[0].tokenId, '44');
+  assert.equal(v.listSamples[0].priceWei, pe('0.002').toString());
+  assert.equal(v.sellSamples.length, 1);
+  assert.equal(v.sellSamples[0].tokenId, '20');
+  const out = adaptList(v.listSamples[0], { me: MAKER, tokenId: 3167n, priceWei: pe('0.005') });
+  assert.equal(out, '0xaaaaaaaa' + A(COL) + W(3167) + W(pe('0.005')));
+});

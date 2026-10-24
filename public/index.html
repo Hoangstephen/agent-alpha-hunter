@@ -539,7 +539,7 @@ $('confirmBtn').onclick = async () => {
     $('confirmBtn').hidden = true;
     $('dlgBody').innerHTML = !r.ok ? `<h3 class="bad">Lỗi</h3><p>${esc(r.error)}</p>`
       : r.next === 'retry' ? `<h3 class="warn">${esc(r.message)}</h3>`
-      : `<h3 class="${r.confirmed ? 'ok' : r.confirmed === false ? 'bad' : 'warn'}">${r.confirmed ? 'Đã bán ✓' : r.confirmed === false ? 'Giao dịch thất bại' : 'Đã gửi, đang chờ xác nhận…'}</h3><a href="https://bscscan.com/tx/${esc(r.txHash)}" target="_blank" rel="noopener">Xem trên BscScan</a>`;
+      : `<h3 class="${r.confirmed ? 'ok' : r.confirmed === false ? 'bad' : 'warn'}">${r.confirmed ? (r.kind === 'mk-list' ? 'Đã đặt giá bán ✓' : 'Đã bán ✓') : r.confirmed === false ? 'Giao dịch thất bại' : 'Đã gửi, đang chờ xác nhận…'}</h3><a href="https://bscscan.com/tx/${esc(r.txHash)}" target="_blank" rel="noopener">Xem trên BscScan</a>`;
     setTimeout(refreshBalance, 8000);
     return;
   }
@@ -615,7 +615,10 @@ $('sellBtn').onclick = async () => {
 function marketLinks(h, it) {
   return (h.markets || []).filter((m) => m.name !== 'Element').map((m) => {
     const sell = m.trust && it?.tokenId != null && !$('sellWallet').value.trim()
-      ? `<button class="primary" data-msell="${esc(m.address)}" data-mnft="${esc(h.contract)}" data-mtid="${esc(it.tokenId)}" data-mname="${esc(h.name || 'NFT')}">Bán ngay ở chợ này</button> <span class="ok" title="Chợ và hợp đồng NFT có cùng chủ trên chain">✓ chợ của dự án</span><br>` : '';
+      ? `<span class="ok" title="Chợ và hợp đồng NFT có cùng chủ trên chain">✓ chợ của dự án</span><br>
+         <input type="number" min="0" step="0.0001" style="width:80px" placeholder="Giá" value="${esc(it.suggestBNB ?? it.best?.priceBNB ?? '')}" data-mprice> BNB
+         <button class="primary" data-msell="${esc(m.address)}" data-mode="list" data-mnft="${esc(h.contract)}" data-mtid="${esc(it.tokenId)}" data-mname="${esc(h.name || 'NFT')}">Đặt giá bán</button>
+         <button data-msell="${esc(m.address)}" data-mode="sell" data-mnft="${esc(h.contract)}" data-mtid="${esc(it.tokenId)}" data-mname="${esc(h.name || 'NFT')}">Bán ngay vào lệnh mua</button><br>` : '';
     const host = (() => { try { return new URL(m.site).hostname; } catch { return null; } })();
     const label = `Chợ ${esc(host || m.name || short(m.address))} (${esc(m.sales)} giao dịch, ${esc(m.sellers)} người bán)`;
     return sell + (m.site
@@ -653,11 +656,11 @@ document.addEventListener('click', async (e) => {
 let pendingMarket = null;
 async function startMarketSell(x) {
   pendingMarket = x;
-  const r = await api('/api/market/preview', { contract: x.contract, tokenId: x.tokenId, market: x.market });
+  const r = await api('/api/market/preview', { contract: x.contract, tokenId: x.tokenId, market: x.market, mode: x.mode, priceBNB: x.priceBNB });
   pendingId = r.ok ? r.id : null;
   pendingStep = r.ok ? 'mk-' + r.step : null;
   $('confirmBtn').hidden = !r.ok;
-  $('confirmBtn').textContent = r.step === 'approve' ? 'Cho phép (bước 1/2)' : 'Xác nhận bán';
+  $('confirmBtn').textContent = r.step === 'approve' ? 'Cho phép (bước 1/2)' : r.step === 'list' ? 'Xác nhận đặt giá' : 'Xác nhận bán';
   const risks = (r.risks || []).length ? `<p class="bad">⚠ ${r.risks.map(esc).join('<br>⚠ ')}</p>` : '<p class="ok">Binance không báo rủi ro.</p>';
   const app = r.needsAppApproval ? '<p class="warn">Sau khi xác nhận, bạn cần duyệt thêm trong app Binance.</p>' : '';
   $('dlgBody').innerHTML = !r.ok
@@ -667,17 +670,20 @@ async function startMarketSell(x) {
          <p>Chợ này có <b>cùng chủ</b> với hợp đồng NFT (chủ: <span class="addr">${esc(r.owner)}</span>), tức là do chính đội dự án làm.</p>
          <div class="addr">Chợ: ${esc(r.market)}</div>${r.site ? `<p><a href="${esc(r.site)}" target="_blank" rel="noopener">${esc(r.site)}</a></p>` : ''}
          ${risks}<p class="muted">Tốn ít gas. Có thể thu hồi sau trên BscScan / revoke.cash. Sau bước này bot tìm lệnh mua tốt nhất để bán.</p>${app}`
-      : `<h3 style="margin-top:0">Bán ${esc(x.name)} #${esc(String(x.tokenId).length > 12 ? String(x.tokenId).slice(0, 6) + '…' : x.tokenId)} vào lệnh mua trên chợ</h3>
+      : `<h3 style="margin-top:0">${r.step === 'list' ? `Đặt giá bán ${esc(x.name)} #${esc(x.tokenId)}: <b>${esc(r.priceBNB)} BNB</b>` : `Bán ${esc(x.name)} #${esc(String(x.tokenId).length > 12 ? String(x.tokenId).slice(0, 6) + '…' : x.tokenId)} vào lệnh mua trên chợ`}</h3>
+         ${r.step === 'list' ? '<p class="muted">NFT được rao bán trên chợ của dự án ở giá này. Có người mua là BNB về ví bạn (chợ trừ phí theo luật của chợ).</p>' : ''}
          <p>Binance mô phỏng giao dịch, số dư thay đổi:</p>
-         ${(r.changes || []).length ? `<ul>${r.changes.map((c) => `<li><b>${esc(c.amount)} ${esc(c.symbol)}</b></li>`).join('')}</ul>` : '<p class="warn">Binance không trả về thay đổi số dư: kiểm tra kỹ trên web của chợ trước khi bán.</p>'}
-         ${risks}<p class="muted">Bot chép cách bán từ giao dịch thật của người khác trên chợ này (<a href="https://bscscan.com/tx/${esc(r.sample)}" target="_blank" rel="noopener">mẫu</a>), thay bằng NFT và ví của bạn.</p>${app}`;
+         ${(r.changes || []).length ? `<ul>${r.changes.map((c) => `<li><b>${esc(c.amount)} ${esc(c.symbol)}</b></li>`).join('')}</ul>` : r.step === 'list' ? '<p class="ok">Không có tiền/NFT rời ví lúc đặt giá (chỉ tốn gas).</p>' : '<p class="warn">Binance không trả về thay đổi số dư: kiểm tra kỹ trên web của chợ trước khi bán.</p>'}
+         ${risks}<p class="muted">Bot chép cách ${r.step === 'list' ? 'đặt giá' : 'bán'} từ giao dịch thật của người khác trên chợ này (<a href="https://bscscan.com/tx/${esc(r.sample)}" target="_blank" rel="noopener">mẫu</a>), thay bằng NFT${r.step === 'list' ? ', giá' : ''} và ví của bạn.</p>${app}`;
   if (!$('dlg').open) $('dlg').showModal();
 }
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-msell]');
   if (!b) return;
   b.disabled = true;
-  await startMarketSell({ market: b.dataset.msell, contract: b.dataset.mnft, tokenId: b.dataset.mtid, name: b.dataset.mname });
+  const priceBNB = b.parentElement.querySelector('[data-mprice]')?.value.trim();
+  if (b.dataset.mode === 'list' && !(Number(priceBNB) > 0)) { b.disabled = false; return alertBox('Nhập giá bán (BNB).'); }
+  await startMarketSell({ market: b.dataset.msell, mode: b.dataset.mode, priceBNB, contract: b.dataset.mnft, tokenId: b.dataset.mtid, name: b.dataset.mname });
   b.disabled = false;
 });
 
