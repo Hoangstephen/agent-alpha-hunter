@@ -598,6 +598,7 @@ $('sellBtn').onclick = async () => {
   const r = await api('/api/sell', { wallet: $('sellWallet').value.trim() || undefined, extra });
   $('sellBtn').disabled = false;
   if (!r.ok) { $('sell').innerHTML = `<div class="bad">${esc(r.error)}</div>`; return; }
+  lastSell = r;
   const rows = r.holdings.flatMap((h) => h.items.map((it) => ({ h, it })));
   const fmt = (o, h) => o ? `<b>${esc(o.priceBNB.toFixed(5).replace(/\.?0+$/, ''))} BNB</b> <span class="muted">${esc(usd(o.priceBNB))}</span><br><span class="muted">${esc(o.venue)}${h.salesCached ? ` · số liệu lúc ${esc(new Date(h.salesCached).toLocaleTimeString())} (RPC lần này đọc lỗi)` : ''}</span>`
     : h.logsIncomplete ? '<span class="warn">RPC chưa đọc được lịch sử giao dịch lần này. Bấm Tìm giá bán cao nhất lại (hoặc dùng RPC riêng).</span>'
@@ -610,14 +611,16 @@ $('sellBtn').onclick = async () => {
         <td>${marketLinks(h, it)}${h.site ? `<a href="${esc(h.site)}" target="_blank" rel="noopener"><b>Bán trên web dự án</b></a><br>` : ''}${it.elementUrl ? `<a href="${esc(it.elementUrl)}" target="_blank" rel="noopener">Xem trên Element</a><br>` : ''}<a href="https://bscscan.com/token/${esc(h.contract)}?a=${esc(r.wallet)}" target="_blank" rel="noopener">BscScan</a></td>
       </tr>`).join('')}</table>`
     : '<div class="muted">Không thấy NFT nào trong ví thuộc các hợp đồng đã kiểm tra. Thêm địa chỉ NFT vào ô bên cạnh rồi thử lại.</div>')
+    + (r.sessionNote ? `<p class="warn">⚠ ${esc(r.sessionNote)}</p>` : '')
     + (r.elementEnabled ? '' : '<p class="muted">ℹ Chưa có Element API key nên chưa đọc được lệnh mua trên Element và chưa đăng bán được. Dán key ở khung phía trên.</p>')
     + '<p class="muted">ℹ Web Element không hiện nút List cho ví Agentic vì ví này không kết nối được vào web. Bot đăng bán thay bạn: lệnh bán vẫn hiện trên Element như bình thường. Nhiều dự án cũng có chợ riêng ("Bán trên web dự án"). Agent ID (.ai) không bán được nên không hiện ở đây. Tên trên Element (vd. "#153") là tên trong metadata, có thể khác số token ID bot hiện.</p>';
 };
 
+let lastSell = null;
 // Chợ riêng của bộ NFT, bot tự tìm từ các giao dịch mua bán gần đây trên chain.
 function marketLinks(h, it) {
   return (h.markets || []).filter((m) => m.name !== 'Element').map((m) => {
-    const sell = m.trust && it?.tokenId != null && !$('sellWallet').value.trim()
+    const sell = m.trust && it?.tokenId != null && !$('sellWallet').value.trim() && !lastSell?.readOnly
       ? `<span class="ok" title="${m.trust.why === 'same-owner' ? 'Chợ và hợp đồng NFT có cùng chủ trên chain' : m.trust.why === 'site' ? 'Web của dự án ghi địa chỉ chợ này' : 'Nhiều người mua đã trả BNB thật qua chợ này'}">✓ ${m.trust.why === 'same-owner' ? 'chợ của dự án' : m.trust.why === 'site' ? 'chợ trên web dự án' : `chợ có ${esc(m.trust.buyers)} người mua thật`}</span><br>
          <input type="text" inputmode="decimal" style="width:80px" placeholder="Giá" value="${esc(it.suggestBNB ?? it.best?.priceBNB ?? '')}" data-mprice> BNB
          <button class="primary" data-msell="${esc(m.address)}" data-mode="list" data-mnft="${esc(h.contract)}" data-mtid="${esc(it.tokenId)}" data-mname="${esc(h.name || 'NFT')}">Đặt giá bán</button>

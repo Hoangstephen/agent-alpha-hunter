@@ -50,13 +50,18 @@ const state = { infoCache: new Map(), provider: null, scan: null, scanning: fals
 const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
 const big = (_, v) => (typeof v === 'bigint' ? v.toString() : v);
 
+// Địa chỉ ví Agentic dùng lần gần nhất (chỉ là địa chỉ công khai): phiên ví hết hạn vẫn xem được NFT và giá.
+function lastWallet() { try { return JSON.parse(readFileSync('data/last-wallet.json', 'utf8')).address ?? null; } catch { return null; } }
 function walletInfo() {
   try {
-    const status = wallet.walletStatus();
-    if (status !== 'CONNECTED') return { installed: true, connected: false, hint: 'Bấm "Đăng nhập ví" rồi quét QR trong app Binance' };
-    return { installed: true, connected: true, address: cfg.walletAddress || wallet.bscAddress(cfg.binanceChainId), devMode: wallet.devModeEnabled() };
+    let status;
+    try { status = wallet.walletStatus(); } catch (e) { if (e.code === 'BAW_MISSING') throw e; status = wallet.walletStatus(); } // lỗi thoáng qua: thử lại 1 lần
+    if (status !== 'CONNECTED') return { installed: true, connected: false, status, last: lastWallet(), hint: `Phiên ví Agentic ${status ? `đang ở trạng thái ${status}` : 'chưa có'}: bấm "Đăng nhập ví" rồi quét QR trong app Binance` };
+    const address = cfg.walletAddress || wallet.bscAddress(cfg.binanceChainId);
+    if (address && address !== lastWallet()) { try { mkdirSync('data', { recursive: true }); writeFileSync('data/last-wallet.json', JSON.stringify({ address })); } catch {} }
+    return { installed: true, connected: true, address, devMode: wallet.devModeEnabled() };
   } catch (e) {
-    return { installed: e.code !== 'BAW_MISSING', connected: false, hint: e.message };
+    return { installed: e.code !== 'BAW_MISSING', connected: false, last: lastWallet(), hint: e.message };
   }
 }
 
@@ -136,10 +141,13 @@ const api = {
   // Tìm giá bán cao nhất cho NFT đang giữ: NFT đã mint qua bot + NFT đang hot + địa chỉ bạn thêm.
   'POST /api/sell': async ({ wallet: manual, extra = [] }) => {
     let addr = manual;
+    let sessionNote = null;
     if (!addr) {
       const w = walletInfo();
-      if (!w.connected) return { ok: false, error: 'Chưa đăng nhập ví. Đăng nhập, hoặc dán địa chỉ ví để chỉ xem.' };
-      addr = w.address;
+      if (!w.connected && !w.last) return { ok: false, error: `${w.hint}. Hoặc dán địa chỉ ví để chỉ xem.` };
+      // Phiên ví hết hạn: vẫn xem NFT + giá bằng địa chỉ ví lần trước, chỉ bán/đặt giá mới cần đăng nhập lại.
+      if (!w.connected) sessionNote = `${w.hint}. Đang hiện NFT của ví ${w.last} (lần đăng nhập trước), đăng nhập lại để bán.`;
+      addr = w.connected ? w.address : w.last;
     }
     if (!isAddress(addr)) return { ok: false, error: 'Địa chỉ ví không hợp lệ' };
     const contracts = [
@@ -160,7 +168,7 @@ const api = {
         it.suggestBNB = suggest;
       }
     }
-    return { ok: true, ...r, canList: Boolean(cfg.elementKey) && !manual };
+    return { ok: true, ...r, canList: Boolean(cfg.elementKey) && !manual && !sessionNote, readOnly: Boolean(manual || sessionNote), sessionNote };
   },
   // Element API key: thử gọi Element trước, chạy được mới lưu vào data/element.json. Để trống = xoá.
   'POST /api/element-key': async ({ key }) => {
