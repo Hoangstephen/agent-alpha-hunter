@@ -275,9 +275,10 @@ export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, lo
     // Log chuyển NFT ~1,5 ngày gần nhất: đọc 1 lần, dùng chung cho giá bán gần đây và tìm chợ riêng của bộ NFT.
     const head = await provider.getBlockNumber();
     const logs = await getLogsChunked(provider, { address: h.contract, topics: [TOPIC.TRANSFER] }, head - 180_000, head, 5000, { concurrency: 6, deadlineMs: 30_000 }).catch(() => null);
+    const page = Promise.race([projectPage(provider, h.contract).catch(() => null), new Promise((r) => setTimeout(() => r(null), 8000))]);
     [h.site, h.markets, h.sales] = await Promise.all([
-      Promise.race([projectPage(provider, h.contract).then((p) => p.site).catch(() => null), new Promise((r) => setTimeout(() => r(null), 8000))]),
-      logs ? Promise.race([findMarkets(provider, h.contract, { logs }).catch(() => []), new Promise((r) => setTimeout(() => r([]), 30_000))]) : [],
+      page.then((p) => p?.site ?? null),
+      logs ? Promise.race([findMarkets(provider, h.contract, { logs, page }).catch(() => []), new Promise((r) => setTimeout(() => r([]), 40_000))]) : [],
       logs ? recentSales(provider, h.contract, { logs, bnbUsdt }).catch(() => ({ count: 0 })) : { count: 0 },
     ]);
     // RPC lỗi / đọc thiếu lần này: dùng lại kết quả tốt gần nhất (tối đa 24 giờ), không báo nhầm "chưa ai bán".

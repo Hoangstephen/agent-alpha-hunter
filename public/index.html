@@ -539,7 +539,8 @@ $('confirmBtn').onclick = async () => {
     $('confirmBtn').hidden = true;
     $('dlgBody').innerHTML = !r.ok ? `<h3 class="bad">Lỗi</h3><p>${esc(r.error)}</p>`
       : r.next === 'retry' ? `<h3 class="warn">${esc(r.message)}</h3>`
-      : `<h3 class="${r.confirmed ? 'ok' : r.confirmed === false ? 'bad' : 'warn'}">${r.confirmed ? (r.kind === 'mk-list' ? 'Đã đặt giá bán ✓' : 'Đã bán ✓') : r.confirmed === false ? 'Giao dịch thất bại' : 'Đã gửi, đang chờ xác nhận…'}</h3><a href="https://bscscan.com/tx/${esc(r.txHash)}" target="_blank" rel="noopener">Xem trên BscScan</a>`;
+      : `<h3 class="${r.confirmed ? 'ok' : r.confirmed === false ? 'bad' : 'warn'}">${r.confirmed ? (r.kind === 'mk-list' ? 'Đã đặt giá bán ✓' : r.kind === 'mk-revoke' ? 'Đã thu hồi quyền ✓' : 'Đã bán ✓') : r.confirmed === false ? 'Giao dịch thất bại' : 'Đã gửi, đang chờ xác nhận…'}</h3><a href="https://bscscan.com/tx/${esc(r.txHash)}" target="_blank" rel="noopener">Xem trên BscScan</a>`
+        + (r.canRevoke ? `<p>Chợ vẫn còn quyền chuyển các NFT khác cùng bộ trong ví bạn. Không bán thêm thì nên thu hồi:</p><button class="primary" data-mrevoke="${esc(r.market)}" data-mnft="${esc(r.contract)}">Thu hồi quyền của chợ</button>` : '');
     setTimeout(refreshBalance, 8000);
     return;
   }
@@ -617,7 +618,7 @@ $('sellBtn').onclick = async () => {
 function marketLinks(h, it) {
   return (h.markets || []).filter((m) => m.name !== 'Element').map((m) => {
     const sell = m.trust && it?.tokenId != null && !$('sellWallet').value.trim()
-      ? `<span class="ok" title="Chợ và hợp đồng NFT có cùng chủ trên chain">✓ chợ của dự án</span><br>
+      ? `<span class="ok" title="${m.trust.why === 'same-owner' ? 'Chợ và hợp đồng NFT có cùng chủ trên chain' : m.trust.why === 'site' ? 'Web của dự án ghi địa chỉ chợ này' : 'Nhiều người mua đã trả BNB thật qua chợ này'}">✓ ${m.trust.why === 'same-owner' ? 'chợ của dự án' : m.trust.why === 'site' ? 'chợ trên web dự án' : `chợ có ${esc(m.trust.buyers)} người mua thật`}</span><br>
          <input type="text" inputmode="decimal" style="width:80px" placeholder="Giá" value="${esc(it.suggestBNB ?? it.best?.priceBNB ?? '')}" data-mprice> BNB
          <button class="primary" data-msell="${esc(m.address)}" data-mode="list" data-mnft="${esc(h.contract)}" data-mtid="${esc(it.tokenId)}" data-mname="${esc(h.name || 'NFT')}">Đặt giá bán</button>
          <button data-msell="${esc(m.address)}" data-mode="sell" data-mnft="${esc(h.contract)}" data-mtid="${esc(it.tokenId)}" data-mname="${esc(h.name || 'NFT')}">Bán ngay vào lệnh mua</button><br>` : '';
@@ -668,8 +669,9 @@ async function startMarketSell(x) {
   $('dlgBody').innerHTML = !r.ok
     ? `<h3 style="margin-top:0" class="bad">Chưa bán được</h3><p>${esc(r.error)}</p>${r.site ? `<a href="${esc(r.site)}" target="_blank" rel="noopener">Mở web của chợ</a>` : ''}`
     : r.step === 'approve'
-      ? `<h3 style="margin-top:0">Bước 1/2: cho chợ của dự án quyền chuyển ${esc(x.name)}</h3>
-         <p>Chợ này có <b>cùng chủ</b> với hợp đồng NFT (chủ: <span class="addr">${esc(r.owner)}</span>), tức là do chính đội dự án làm.</p>
+      ? `<h3 style="margin-top:0">Bước 1/2: cho chợ quyền chuyển ${r.scope === 'all' ? `các NFT ${esc(x.name)}` : `<b>chỉ riêng</b> ${esc(x.name)} #${esc(x.tokenId)}`}</h3>
+         <p>${trustText(r.trust)}</p>
+         ${r.scope === 'all' ? '' : '<p class="muted">Bot chỉ cấp quyền cho đúng 1 NFT này, không phải cả bộ. Quyền tự mất khi NFT được bán.</p>'}
          <div class="addr">Chợ: ${esc(r.market)}</div>${r.site ? `<p><a href="${esc(r.site)}" target="_blank" rel="noopener">${esc(r.site)}</a></p>` : ''}
          ${risks}<p class="muted">Tốn ít gas. Có thể thu hồi sau trên BscScan / revoke.cash. Sau bước này bot tìm lệnh mua tốt nhất để bán.</p>${app}`
       : `<h3 style="margin-top:0">${r.step === 'list' ? `Đặt giá bán ${esc(x.name)} #${esc(x.tokenId)}: <b>${esc(r.priceBNB)} BNB</b>` : `Bán ${esc(x.name)} #${esc(String(x.tokenId).length > 12 ? String(x.tokenId).slice(0, 6) + '…' : x.tokenId)} vào lệnh mua trên chợ`}</h3>
@@ -679,6 +681,25 @@ async function startMarketSell(x) {
          ${risks}<p class="muted">Bot chép cách ${r.step === 'list' ? 'đặt giá' : 'bán'} từ giao dịch thật của người khác trên chợ này (<a href="https://bscscan.com/tx/${esc(r.sample)}" target="_blank" rel="noopener">mẫu</a>), thay bằng NFT${r.step === 'list' ? ', giá' : ''} và ví của bạn.</p>${app}`;
   if (!$('dlg').open) $('dlg').showModal();
 }
+function trustText(t = {}) {
+  if (t.why === 'same-owner') return `Chợ này có <b>cùng chủ</b> với hợp đồng NFT (chủ: <span class="addr">${esc(t.owner)}</span>), tức là do chính đội dự án làm.`;
+  if (t.why === 'site') return `Web của dự án (<a href="${esc(t.site)}" target="_blank" rel="noopener">${esc(t.site)}</a>) có ghi địa chỉ chợ này.`;
+  if (t.why === 'buyers') return `Chợ có <b>${esc(t.buyers)} người mua</b> đã trả BNB thật để mua NFT của <b>${esc(t.sellers)} người bán</b> bộ này gần đây. Không chứng minh được là của chính dự án, nên chỉ cấp quyền 1 NFT.`;
+  return '';
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-mrevoke]');
+  if (!b) return;
+  b.disabled = true;
+  const r = await api('/api/market/revoke', { contract: b.dataset.mnft, market: b.dataset.mrevoke });
+  pendingId = r.ok && !r.nothing ? r.id : null;
+  pendingStep = pendingId ? 'mk-revoke' : null;
+  $('confirmBtn').hidden = !pendingId;
+  $('confirmBtn').textContent = 'Xác nhận thu hồi';
+  $('dlgBody').innerHTML = !r.ok ? `<h3 class="bad">Lỗi</h3><p>${esc(r.error)}</p>` : r.nothing ? '<h3 class="ok">Chợ không còn quyền nào ✓</h3>'
+    : `<h3 style="margin-top:0">Thu hồi quyền của chợ</h3><div class="addr">${esc(r.market)}</div><p class="muted">Tốn ít gas. Chợ sẽ không chuyển được NFT bộ này của bạn nữa.</p>${r.needsAppApproval ? '<p class="warn">Sau khi xác nhận, bạn cần duyệt thêm trong app Binance.</p>' : ''}`;
+  if (!$('dlg').open) $('dlg').showModal();
+});
 document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-msell]');
   if (!b) return;

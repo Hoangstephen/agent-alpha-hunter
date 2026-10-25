@@ -87,7 +87,7 @@ function safeUrl(u) {
   } catch { return null; }
 }
 
-async function fetchText(u, fetchFn, max = 600_000) {
+export async function fetchText(u, fetchFn, max = 600_000) {
   const url = safeUrl(u);
   if (!url) return null;
   const r = await fetchFn(url, { redirect: 'follow', signal: AbortSignal.timeout(7000), headers: { accept: 'text/html,application/json' } });
@@ -170,7 +170,7 @@ export function sourceFacts(src = '') {
   const own = String(src).split(/(?=\/\/ SPDX-License-Identifier)/).filter((f) => !/openzeppelin|erc721a|solady|solmate/i.test(f.slice(0, 2000))).join('\n');
   const notes = [...own.matchAll(/(?:\/\/\/?|\*)\s*(?:@(?:title|notice|dev)\s+)?([^\n*]{20,240})/g)].map((m) => m[1].trim())
     .filter((t) => RULE_WORDS.test(t) && !/SPDX|pragma|license|solidity|@param|@return|import /i.test(t));
-  const urls = [...own.matchAll(/https:\/\/[a-z0-9.-]+\.[a-z]{2,}[^\s"'<>)]*/gi)].map((m) => m[0]).filter((u) => !/github\.com|openzeppelin|eips\.ethereum|ethereum\.org|docs\.soliditylang|ipfs\.io|etherscan|bscscan/i.test(u));
+  const urls = [...own.matchAll(/https:\/\/[a-z0-9.-]+\.[a-z]{2,}[^\s"'<>)]*/gi)].map((m) => m[0]).filter((u) => !/github\.com|openzeppelin|eips\.ethereum|ethereum\.org|soliditylang|readthedocs|solidity\.|docs\.|ipfs\.io|etherscan|bscscan|chain\.link|uniswap\.org|wikipedia/i.test(u));
   return {
     notes: [...new Set(notes)].slice(0, 8),
     site: urls.find((u) => !/(x|twitter|t\.me|discord|telegram)\.(com|me|gg)/i.test(u)) ?? null,

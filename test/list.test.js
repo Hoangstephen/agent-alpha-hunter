@@ -298,3 +298,41 @@ test('sellReport: RPC lỗi lần này thì dùng lại giá bán + chợ của 
   assert.equal(h.items[0].best.priceBNB, 0.001);
   rmSync(dir, { recursive: true, force: true });
 });
+
+test('Chợ có người mua thật: ≥5 người mua trả BNB cho ≥5 người bán → tin, chỉ cấp quyền 1 NFT', async () => {
+  const { findMarkets, approveTokenData } = await import('../src/markets.js');
+  const { TOPIC } = await import('../src/chain.js');
+  const { zeroPadValue } = await import('ethers');
+  const MK = '0x5555555555555555555555555555555555555556';
+  const COL = '0x6666666666666666666666666666666666666667';
+  const a = (p, i) => '0x' + p + String(i).padStart(38, '0');
+  const logs = [];
+  const txs = {};
+  for (let i = 1; i <= 6; i++) {
+    const h = '0x' + String(i).padStart(64, '0');
+    logs.push({ address: COL, transactionHash: h, blockNumber: 100 + i, topics: [TOPIC.TRANSFER, zeroPadValue(a('a1', i), 32), zeroPadValue(a('b1', i), 32), zeroPadValue('0x0' + i, 32)] });
+    txs[h] = { from: a('b1', i), to: MK, value: 10n ** 15n, data: '0xabcdef01' + '00'.repeat(64) };
+  }
+  const provider = { getBlockNumber: async () => 1000, getLogs: async () => logs, getCode: async () => '0x6080', call: async () => '0x', getTransaction: async (h) => txs[h] };
+  const [m] = await findMarkets(provider, COL, { fetchFn: async () => ({ ok: false }) });
+  assert.equal(m.buyers, 6);
+  assert.equal(m.trust.why, 'buyers');
+  assert.equal(m.trust.scope, 'token');
+  // Drainer: không ai trả BNB (value 0, kẻ gửi giao dịch nhận NFT của người khác) → không tin.
+  for (const h in txs) txs[h] = { ...txs[h], value: 0n };
+  const [d] = await findMarkets(provider, '0x6666666666666666666666666666666666666668', { logs: logs.map((l) => ({ ...l, address: '0x6666666666666666666666666666666666666668' })), fetchFn: async () => ({ ok: false }) });
+  assert.equal(d.trust, null);
+  assert.ok(approveTokenData(MK, 7).startsWith('0x095ea7b3'));
+});
+
+test('siteMentions: web dự án ghi địa chỉ chợ (trong HTML hoặc file JS cùng tên miền)', async () => {
+  const { siteMentions } = await import('../src/markets.js');
+  const MK = '0xAbCd000000000000000000000000000000001234';
+  assert.equal(await siteMentions('https://proj.xyz/', `<div data-m="${MK.toLowerCase()}">`, MK), true);
+  const html = '<script src="/assets/app.js"></script><script src="https://evil.com/x.js"></script>';
+  const seen = [];
+  const fetchFn = async (u) => { seen.push(u); return { ok: true, text: async () => (u.includes('proj.xyz') ? `const MARKET="${MK}"` : '') }; };
+  assert.equal(await siteMentions('https://proj.xyz/', html, MK, fetchFn), true);
+  assert.ok(!seen.some((u) => u.includes('evil.com')));
+  assert.equal(await siteMentions('https://proj.xyz/', '<p>nothing</p>', MK, fetchFn), false);
+});

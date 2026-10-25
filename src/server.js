@@ -17,14 +17,14 @@ import { Ledger } from './ledger.js';
 import { bnbUsdt } from './price.js';
 import { sellReport } from './sell.js';
 import { lpLock } from './lp.js';
-import { findMarkets, trustOf, findInstantSell, approveMarketData, marketApproved, previewMarketCall, learnMarket, findListCall } from './markets.js';
+import { findMarkets, trustMarket, findInstantSell, approveMarketData, approveTokenData, revokeMarketData, marketApproved, previewMarketCall, learnMarket, findListCall } from './markets.js';
 import { buildListing, checkListing, signListing, postListing, previewApproveElement, elementApi } from './list.js';
 import { autoSellConfig, saveAutoSell, autoSellTick, listedMap, markListed, mintCostBNB, suggestPrice } from './autosell.js';
 import { webRules, projectPage, translateTo } from './rules.js';
 import { notifyScan } from './telegram.js';
 import { watchList, watchAdd } from './watch.js';
 import { resolveAgentId, saveAgentName, labelOf, validLabel } from './agentid.js';
-import { isAddress } from 'ethers';
+import { isAddress, getAddress } from 'ethers';
 import * as wallet from './baw.js';
 
 const PORT = Number(process.env.PORT || 3777);
@@ -178,23 +178,26 @@ const api = {
     const w = walletInfo();
     if (!w.connected) return { ok: false, error: w.hint };
     if (!isAddress(contract) || !isAddress(market) || !/^\d{1,78}$/.test(String(tokenId))) return { ok: false, error: 'Dữ liệu không hợp lệ' };
-    let m = (await findMarkets(state.provider, contract).catch(() => [])).find((x) => x.address.toLowerCase() === market.toLowerCase());
+    const page = Promise.race([projectPage(state.provider, contract).catch(() => null), new Promise((r) => setTimeout(() => r(null), 8000))]);
+    let m = (await findMarkets(state.provider, contract, { page }).catch(() => [])).find((x) => x.address.toLowerCase() === market.toLowerCase());
     if (!m) {
       // RPC lỗi lượt này: dùng chợ đã thấy lần trước, kiểm tra lại "cùng chủ" ngay trên chain.
       let c = {};
       try { c = JSON.parse(readFileSync('data/sell-cache.json', 'utf8')); } catch {}
       const old = (c[contract.toLowerCase()]?.markets ?? []).find((x) => x.address.toLowerCase() === market.toLowerCase());
-      if (old) m = { ...old, trust: await trustOf(state.provider, contract, old.address).catch(() => null) };
+      if (old) { const pg = await page; m = { ...old, trust: await trustMarket(state.provider, contract, old, { site: pg?.site, html: pg?.html }).catch(() => null) }; }
     }
     if (!m) return { ok: false, error: 'Không thấy chợ này trong các giao dịch gần đây của bộ NFT. Bấm Tìm giá bán cao nhất lại.' };
-    if (!m.trust) return { ok: false, error: 'Chợ này không chứng minh được là của chính dự án (khác chủ với hợp đồng NFT): bot không cấp quyền. Bán trên web của chợ nếu bạn tin nó.' };
+    if (!m.trust) return { ok: false, error: `Chợ này chưa đủ bằng chứng là chợ thật: khác chủ với hợp đồng NFT, web dự án không nhắc tới, và mới có ${m.buyers ?? 0} người mua trả BNB qua chợ (cần ≥ 5). Bot không cấp quyền. Bán trên web của chợ nếu bạn tin nó.`, site: m.site };
     const id = randomUUID();
-    const base = { market: m.address, site: m.site, owner: m.trust.owner, contract, tokenId: String(tokenId) };
-    if (!(await marketApproved(state.provider, contract, w.address, m.address))) {
-      const pv = previewMarketCall(cfg, w.address, contract, approveMarketData(m.address));
+    const base = { market: m.address, site: m.site, owner: m.trust.owner, trust: m.trust, contract, tokenId: String(tokenId) };
+    if (!(await marketApproved(state.provider, contract, w.address, m.address, tokenId))) {
+      // Cùng chủ với dự án: quyền cả bộ (bán nhiều NFT không phải cấp lại). Cách tin khác: chỉ quyền cho đúng NFT này.
+      const scope = m.trust.scope === 'all' ? 'all' : 'token';
+      const pv = previewMarketCall(cfg, w.address, contract, scope === 'all' ? approveMarketData(m.address) : approveTokenData(m.address, tokenId));
       if (!pv.ok) return pv;
-      state.pending.set(id, { kind: 'mk-approve', requestId: pv.requestId, contract, market: m.address, at: Date.now() });
-      return { ok: true, step: 'approve', id, ...base, risks: pv.risks, needsAppApproval: pv.requireConfirmation };
+      state.pending.set(id, { kind: 'mk-approve', requestId: pv.requestId, contract, tokenId: String(tokenId), market: m.address, at: Date.now() });
+      return { ok: true, step: 'approve', scope, id, ...base, risks: pv.risks, needsAppApproval: pv.requireConfirmation };
     }
     const learnedM = await learnMarket(state.provider, m.address, contract).catch(() => ({ sellSamples: [], listSamples: [] }));
     let call;
@@ -213,6 +216,18 @@ const api = {
     state.pending.set(id, { kind: mode === 'list' ? 'mk-list' : 'mk-sell', requestId: pv.requestId, contract, tokenId: String(tokenId), market: m.address, at: Date.now() });
     return { ok: true, step: mode === 'list' ? 'list' : 'sell', id, ...base, priceBNB: mode === 'list' ? Number(priceBNB) : null, changes: pv.changes, risks: pv.risks, sample: call.sample, needsAppApproval: pv.requireConfirmation };
   },
+  // Sau khi bán: thu hồi quyền cả bộ đã cấp cho chợ (giống "revoke mọi approval" sau khi bán).
+  'POST /api/market/revoke': async ({ contract, market }) => {
+    const w = walletInfo();
+    if (!w.connected) return { ok: false, error: w.hint };
+    if (!isAddress(contract) || !isAddress(market)) return { ok: false, error: 'Dữ liệu không hợp lệ' };
+    if (!(await marketApproved(state.provider, contract, w.address, market))) return { ok: true, nothing: true };
+    const pv = previewMarketCall(cfg, w.address, contract, revokeMarketData(market));
+    if (!pv.ok) return pv;
+    const id = randomUUID();
+    state.pending.set(id, { kind: 'mk-revoke', requestId: pv.requestId, contract, market: getAddress(market), at: Date.now() });
+    return { ok: true, step: 'revoke', id, contract, market: getAddress(market), risks: pv.risks, needsAppApproval: pv.requireConfirmation };
+  },
   'POST /api/market/execute': async ({ id }) => {
     const p = state.pending.get(id);
     state.pending.delete(id);
@@ -220,10 +235,13 @@ const api = {
     const r = executeApprove(p.requestId); // cùng lệnh contract-call execute
     if (!r.ok) return r;
     if (!r.txHash) return { ok: true, next: 'retry', message: 'Duyệt giao dịch trong app Binance, rồi bấm lại.' };
-    log(`[bán] ${p.kind === 'mk-approve' ? `cấp quyền chợ ${p.market} cho ${p.contract}` : `${p.kind === 'mk-list' ? 'đặt giá bán' : 'bán'} ${p.contract} #${p.tokenId} trên chợ ${p.market}`}: ${r.txHash}`);
+    log(`[bán] ${p.kind === 'mk-revoke' ? `thu hồi quyền chợ ${p.market} cho ${p.contract}` : p.kind === 'mk-approve' ? `cấp quyền chợ ${p.market} cho ${p.contract}` : `${p.kind === 'mk-list' ? 'đặt giá bán' : 'bán'} ${p.contract} #${p.tokenId} trên chợ ${p.market}`}: ${r.txHash}`);
     const done = await waitReceipt(state.provider, r.txHash, { timeoutMs: 60_000 });
     if (p.kind === 'mk-approve') return done ? { ok: true, next: 'sell' } : { ok: false, error: 'Cấp quyền chưa được xác nhận trên chain, thử lại sau ít phút.' };
-    return { ok: true, txHash: r.txHash, confirmed: done, kind: p.kind };
+    if (p.kind === 'mk-revoke') return { ok: true, txHash: r.txHash, confirmed: done, kind: p.kind };
+    // Bán xong mà chợ vẫn giữ quyền cả bộ: gợi ý thu hồi (đặt giá bán thì phải giữ quyền tới khi có người mua).
+    const canRevoke = p.kind === 'mk-sell' && done && (await marketApproved(state.provider, p.contract, walletInfo().address, p.market));
+    return { ok: true, txHash: r.txHash, confirmed: done, kind: p.kind, canRevoke, contract: p.contract, market: p.market };
   },
   // LP của token có bị khoá/đốt không (pool PancakeSwap V2).
   'POST /api/lp': async ({ token, quote }) => {

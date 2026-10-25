@@ -3,17 +3,22 @@
 // 2) Tin chợ: CHỈ khi chứng minh được chợ do chính đội dự án làm: owner() của chợ = owner() của hợp đồng NFT
 //    (khác địa chỉ 0). Hợp đồng drainer cũng chuyển NFT của nhiều người y như chợ, nhưng không thể có cùng chủ
 //    với dự án. Chợ không chứng minh được thì bot chỉ hiện link, không cấp quyền, không bán.
+//    Thêm 2 cách tin (chỉ cấp quyền cho ĐÚNG 1 NFT, không bao giờ quyền cả bộ):
+//    - web của dự án có ghi địa chỉ chợ (trong trang hoặc file JS của trang);
+//    - chợ có ≥ 5 người mua khác nhau đã trả BNB thật qua chợ để mua NFT của ≥ 5 người bán khác nhau.
+//    Quyền 1 NFT tự mất khi NFT được bán; drainer có lừa được cũng chỉ lấy được đúng NFT đó.
 // 3) Bán ngay: chép đúng giao dịch người khác đã tự bán vào lệnh mua (offer) trên chợ đó (giống học cách mint),
 //    thay số token + địa chỉ ví của họ bằng của bạn. Luôn qua mô phỏng + Binance preview + bạn bấm xác nhận.
 import { Interface, getAddress, ZeroAddress } from 'ethers';
 import { TOPIC, getLogsChunked, topicToAddress, mapLimit, tryCall } from './chain.js';
-import { verifiedSource } from './rules.js';
+import { verifiedSource, fetchText } from './rules.js';
 import { ELEMENT } from './list.js';
 import * as wallet from './baw.js';
 
 const KNOWN = { [ELEMENT.EX.toLowerCase()]: { name: 'Element', site: 'https://element.market' } };
 const ownI = new Interface(['function owner() view returns (address)']);
-const nftI = new Interface(['function setApprovalForAll(address,bool)', 'function isApprovedForAll(address,address) view returns (bool)']);
+const nftI = new Interface(['function setApprovalForAll(address,bool)', 'function isApprovedForAll(address,address) view returns (bool)', 'function approve(address,uint256)', 'function getApproved(uint256) view returns (address)']);
+export const PROVEN = { buyers: 5, sellers: 5 };
 const pad = (a) => a.toLowerCase().replace(/^0x/, '').padStart(64, '0');
 const word = (n) => BigInt(n).toString(16).padStart(64, '0');
 
@@ -24,8 +29,36 @@ export async function trustOf(provider, nft, market) {
   return null;
 }
 
+// Web của dự án có nhắc tới địa chỉ chợ không (trong HTML hoặc tối đa 8 file JS cùng tên miền).
+export async function siteMentions(site, html, address, fetchFn = fetch) {
+  const a = address.toLowerCase().slice(2);
+  if (!site) return false;
+  if (String(html ?? '').toLowerCase().includes(a)) return true;
+  let base;
+  try { base = new URL(site); } catch { return false; }
+  const srcs = [...String(html ?? '').matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => { try { return new URL(m[1], base); } catch { return null; } })
+    .filter((u) => u && u.protocol === 'https:' && u.hostname.split('.').slice(-2).join('.') === base.hostname.split('.').slice(-2).join('.')).slice(0, 8);
+  for (const u of srcs) {
+    const t = await fetchText(u.href, fetchFn, 5_000_000).catch(() => null);
+    if (t && t.toLowerCase().includes(a)) return true;
+  }
+  return false;
+}
+
+// Đủ bằng chứng là chợ thật: nhiều người mua khác nhau trả BNB qua chợ để mua NFT của nhiều người bán khác nhau.
+export const provenMarket = (m) => (m?.buyers ?? 0) >= PROVEN.buyers && (m?.paidSellers ?? 0) >= PROVEN.sellers;
+
+// Tin chợ theo thứ tự: cùng chủ (quyền cả bộ) > web dự án ghi địa chỉ chợ > chợ có người mua thật (quyền 1 NFT).
+export async function trustMarket(provider, nft, m, { site, html, fetchFn } = {}) {
+  const t = await trustOf(provider, nft, m.address).catch(() => null);
+  if (t) return { ...t, scope: 'all' };
+  if (site && await siteMentions(site, html, m.address, fetchFn).catch(() => false)) return { why: 'site', site, scope: 'token' };
+  if (provenMarket(m)) return { why: 'buyers', buyers: m.buyers, sellers: m.paidSellers, scope: 'token' };
+  return null;
+}
+
 const cache = new Map();
-export async function findMarkets(provider, nft, { blocks = 200_000, chunk = 5000, deadlineMs = 25_000, maxTx = 40, fetchFn, logs } = {}) {
+export async function findMarkets(provider, nft, { blocks = 200_000, chunk = 5000, deadlineMs = 25_000, maxTx = 40, fetchFn, logs, page } = {}) {
   nft = getAddress(nft);
   const hit = cache.get(nft);
   if (hit && Date.now() - hit.at < 10 * 60_000) return hit.v;
@@ -36,7 +69,7 @@ export async function findMarkets(provider, nft, { blocks = 200_000, chunk = 500
   const byTx = new Map();
   for (const l of logs) {
     if (l.topics.length !== 4 || l.topics[1] === TOPIC.ZERO) continue; // bỏ mint và ERC-20
-    if (!byTx.has(l.transactionHash)) byTx.set(l.transactionHash, { from: topicToAddress(l.topics[1]), tokenId: BigInt(l.topics[3]).toString(), block: l.blockNumber, n: 0 });
+    if (!byTx.has(l.transactionHash)) byTx.set(l.transactionHash, { from: topicToAddress(l.topics[1]), to: topicToAddress(l.topics[2]), tokenId: BigInt(l.topics[3]).toString(), block: l.blockNumber, n: 0 });
     byTx.get(l.transactionHash).n += 1;
   }
   const rows = [...byTx].sort((a, b) => b[1].block - a[1].block).slice(0, maxTx);
@@ -47,9 +80,13 @@ export async function findMarkets(provider, nft, { blocks = 200_000, chunk = 500
   const m = new Map();
   for (const t of txs.filter(Boolean)) {
     if (t.market === nft || t.data.length < 10) continue; // chuyển thẳng giữa 2 ví, không qua chợ
-    const r = m.get(t.market) ?? { address: t.market, sales: 0, sellers: new Set(), sellSamples: [] };
+    const r = m.get(t.market) ?? { address: t.market, sales: 0, sellers: new Set(), sellSamples: [], buyerSet: new Set(), paidSet: new Set() };
     r.sales += 1;
     r.sellers.add(t.from.toLowerCase());
+    // Mua thật: người gửi giao dịch trả BNB và chính họ nhận NFT của người khác.
+    if (BigInt(t.value) > 0n && t.txFrom.toLowerCase() === t.to.toLowerCase() && t.from.toLowerCase() !== t.to.toLowerCase()) {
+      r.buyerSet.add(t.to.toLowerCase()); r.paidSet.add(t.from.toLowerCase());
+    }
     // Người bán tự gửi giao dịch, không kèm BNB, 1 NFT = bán vào lệnh mua (offer) có sẵn trên chợ.
     if (t.txFrom.toLowerCase() === t.from.toLowerCase() && BigInt(t.value) === 0n && t.n === 1) r.sellSamples.push({ hash: t.hash, seller: t.from, tokenId: t.tokenId, data: t.data });
     m.set(t.market, r);
@@ -62,7 +99,11 @@ export async function findMarkets(provider, nft, { blocks = 200_000, chunk = 500
     r.name = k?.name ?? src?.name ?? null;
     r.site = k?.site ?? src?.site ?? null;
     r.sellers = r.sellers.size;
-    r.trust = k ? null : await trustOf(provider, nft, r.address).catch(() => null);
+    r.buyers = r.buyerSet.size; r.paidSellers = r.paidSet.size;
+    delete r.buyerSet; delete r.paidSet;
+    if (r.site && /readthedocs|soliditylang|docs\.|github\.com/i.test(r.site)) r.site = null;
+    const pg = await Promise.resolve(page).catch(() => null);
+    r.trust = k ? null : await trustMarket(provider, nft, r, { site: pg?.site, html: pg?.html, fetchFn }).catch(() => null);
   });
   const v = out.filter((r) => r.isContract);
   if (v.length) cache.set(nft, { at: Date.now(), v }); // không nhớ kết quả rỗng (có thể do RPC lỗi lần này)
@@ -152,8 +193,14 @@ export async function findListCall(provider, market, samples, { me, tokenId, pri
 }
 
 export const approveMarketData = (market) => nftI.encodeFunctionData('setApprovalForAll', [getAddress(market), true]);
-export async function marketApproved(provider, nft, owner, market) {
-  try { return nftI.decodeFunctionResult('isApprovedForAll', await provider.call({ to: nft, data: nftI.encodeFunctionData('isApprovedForAll', [owner, market]) }))[0]; } catch { return false; }
+// Quyền cho đúng 1 NFT (chợ chưa chứng minh được cùng chủ với dự án).
+export const approveTokenData = (market, tokenId) => nftI.encodeFunctionData('approve', [getAddress(market), BigInt(tokenId)]);
+export const revokeMarketData = (market) => nftI.encodeFunctionData('setApprovalForAll', [getAddress(market), false]);
+export async function marketApproved(provider, nft, owner, market, tokenId) {
+  const read = async (fn, args) => nftI.decodeFunctionResult(fn, await provider.call({ to: nft, data: nftI.encodeFunctionData(fn, args) }))[0];
+  try { if (await read('isApprovedForAll', [owner, market])) return true; } catch {}
+  if (tokenId == null) return false;
+  try { return (await read('getApproved', [BigInt(tokenId)])).toLowerCase() === market.toLowerCase(); } catch { return false; }
 }
 
 // Thay đổi số dư Binance mô phỏng (tên trường có thể khác nhau giữa các bản).
