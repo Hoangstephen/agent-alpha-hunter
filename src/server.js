@@ -59,7 +59,8 @@ function walletInfo() {
     if (status !== 'CONNECTED') return { installed: true, connected: false, status, last: lastWallet(), hint: `Phiên ví Agentic ${status ? `đang ở trạng thái ${status}` : 'chưa có'}: bấm "Đăng nhập ví" rồi quét QR trong app Binance` };
     const address = cfg.walletAddress || wallet.bscAddress(cfg.binanceChainId);
     if (address && address !== lastWallet()) { try { mkdirSync('data', { recursive: true }); writeFileSync('data/last-wallet.json', JSON.stringify({ address })); } catch {} }
-    return { installed: true, connected: true, address, devMode: wallet.devModeEnabled() };
+    const dm = wallet.devModeInfo();
+    return { installed: true, connected: true, address, devMode: dm.enabled, devInfo: dm };
   } catch (e) {
     return { installed: e.code !== 'BAW_MISSING', connected: false, last: lastWallet(), hint: e.message };
   }

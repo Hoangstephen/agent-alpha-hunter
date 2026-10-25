@@ -85,6 +85,23 @@ export function devModeEnabled() {
   return Boolean(baw(['wallet', 'settings']).data?.devMode?.enabled);
 }
 
+// baw in giờ dạng "2026-10-25 17:30:00 (+07:00)": đổi sang ISO để trình duyệt hiểu.
+export function toIso(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') return new Date(v > 1e12 ? v : v * 1000).toISOString();
+  const m = String(v).match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?[^+\-\d]*([+-]\d{2}:?\d{2})?/);
+  if (m) { const t = Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6] ?? '00'}${m[7] ? m[7].replace(/^([+-]\d{2})(\d{2})$/, '$1:$2') : ''}`); if (Number.isFinite(t)) return new Date(t).toISOString(); }
+  const t = Date.parse(String(v));
+  return Number.isFinite(t) ? new Date(t).toISOString() : null;
+}
+
+// Developer Mode của Binance có hạn (tự tắt khi hết giờ), hạn mức mỗi ngày và có thể bị tắt khi số dư vượt mức.
+export function devModeInfo() {
+  const d = baw(['wallet', 'settings']).data ?? {};
+  const m = d.devMode ?? {};
+  return { enabled: Boolean(m.enabled), expiresAt: toIso(m.expiresAt), dailyLimit: m.dailyLimit ?? null, used: d.developerModeQuotaUsed ?? null, balanceExceeded: Boolean(m.balanceExceeded) };
+}
+
 // Bản CLI khác nhau có/không có tuỳ chọn --binanceChainId: thử có trước, báo "unknown option" thì chạy lại không có.
 function withChainFallback(base, chainId) {
   try {

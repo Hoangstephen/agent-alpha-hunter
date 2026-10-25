@@ -554,3 +554,10 @@ test('MultiRpc: cùng 1 lỗi ở 2 RPC (lỗi do lệnh gọi) thì dừng, kh�
   await assert.rejects(m.call({}), /coalesce/);
   assert.equal(lines.filter((l) => l.includes('chuyển sang')).length, 1, lines.join('\n'));
 });
+
+import { toIso } from '../src/baw.js';
+test('toIso: đọc giờ hết hạn Developer Mode từ baw', () => {
+  assert.equal(toIso('2026-10-25 17:30:00 (+07:00)'), '2026-10-25T10:30:00.000Z');
+  assert.equal(toIso(1793526813), '2026-11-01T09:53:33.000Z');
+  assert.equal(toIso(null), null);
+});

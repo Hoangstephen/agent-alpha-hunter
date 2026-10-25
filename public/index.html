@@ -354,7 +354,14 @@ async function refreshWallet() {
   if (w.connected && $('balance').hidden) refreshBalance();
   if (!w.connected) $('balance').hidden = true;
   if (w.connected) {
-    $('wallet').innerHTML = `<span class="ok">● Ví ${esc(short(w.address || ''))}</span>${w.devMode ? '' : ' <span class="bad">Developer Mode đang tắt (bật trong app Binance)</span>'}`;
+    const dm = w.devInfo || {};
+    const exp = dm.expiresAt ? Date.parse(dm.expiresAt) : NaN;
+    const left = Number.isFinite(exp) ? Math.round((exp - Date.now()) / 60000) : null;
+    const devTxt = !w.devMode
+      ? ` <span class="bad" title="Binance tự tắt Developer Mode khi hết hạn. Bật lại: app Binance → Ví Agentic → Cài đặt → Developer Mode.">Developer Mode đang tắt${dm.balanceExceeded ? ' (số dư ví vượt mức cho phép của Developer Mode)' : Number.isFinite(exp) && exp < Date.now() ? ' (đã hết hạn lúc ' + esc(new Date(exp).toLocaleTimeString()) + ')' : ''}: bật lại trong app Binance → Ví Agentic → Cài đặt</span>`
+      : left != null && left < 60 ? ` <span class="warn">Developer Mode tự tắt sau ${left} phút (bật lại trong app Binance)</span>`
+      : left != null ? ` <span class="muted">Developer Mode bật tới ${esc(new Date(exp).toLocaleString())}</span>` : '';
+    $('wallet').innerHTML = `<span class="ok">● Ví ${esc(short(w.address || ''))}</span>${devTxt}`;
     $('walletActions').innerHTML = btn('logoutBtn', 'Đăng xuất');
   } else if (!w.installed) {
     $('wallet').innerHTML = '<span class="bad">● Chưa cài baw (CLI ví Binance)</span>';
@@ -829,7 +836,8 @@ $('rescanBtn').onclick = async () => { $('rescanBtn').disabled = true; $('rescan
 $('scanBtn').onclick = async () => { await api('/api/scan', {}); refresh(); };
 $('checkBtn').onclick = async () => {
   const a = $('addr').value.trim();
-  if (!/^0x[0-9a-fA-F]{40}$/.test(a)) { $('checked').innerHTML = '<div class="bad">Địa chỉ không hợp lệ.</div>'; return; }
+  if (!a) { $('checked').innerHTML = '<div class="muted">Dán địa chỉ hợp đồng NFT (0x… 42 ký tự) vào ô trên rồi bấm Kiểm tra.</div>'; return; }
+  if (!/^0x[0-9a-fA-F]{40}$/.test(a)) { $('checked').innerHTML = '<div class="bad">Địa chỉ không hợp lệ: cần dạng 0x + 40 ký tự (không phải link, tên hay số token).</div>'; return; }
   $('checked').innerHTML = '<div class="muted">Đang kiểm tra…</div>';
   const r = await api('/api/inspect', { address: a });
   $('checked').innerHTML = r.error ? `<div class="bad">${esc(r.error)}</div>` : card({ ...r, address: a });
