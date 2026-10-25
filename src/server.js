@@ -17,7 +17,7 @@ import { Ledger } from './ledger.js';
 import { bnbUsdt } from './price.js';
 import { sellReport } from './sell.js';
 import { lpLock } from './lp.js';
-import { findMarkets, trustMarket, findInstantSell, approveMarketData, approveTokenData, revokeMarketData, marketApproved, previewMarketCall, learnMarket, findListCall } from './markets.js';
+import { findMarkets, trustMarket, findInstantSell, approveMarketData, approveTokenData, revokeMarketData, marketApproved, previewMarketCall, learnMarket, findListCall, markBadCall } from './markets.js';
 import { buildListing, checkListing, signListing, postListing, previewApproveElement, elementApi } from './list.js';
 import { autoSellConfig, saveAutoSell, autoSellTick, listedMap, markListed, mintCostBNB, suggestPrice } from './autosell.js';
 import { webRules, projectPage, translateTo } from './rules.js';
@@ -222,7 +222,7 @@ const api = {
     const pv = await previewMarketCall(cfg, w.address, m.address, call.data, { provider: state.provider, what: mode === 'list' ? 'lệnh đặt giá' : 'lệnh bán', log });
     if (!pv.ok) return pv;
     if (pv.extraPerms) return { ok: false, error: 'Giao dịch này kèm cấp thêm quyền cho bên khác: đã chặn.', risks: pv.risks };
-    state.pending.set(id, { kind: mode === 'list' ? 'mk-list' : 'mk-sell', requestId: pv.requestId, contract, tokenId: String(tokenId), market: m.address, site: m.site ?? null, priceBNB: mode === 'list' ? Number(priceBNB) : null, at: Date.now() });
+    state.pending.set(id, { kind: mode === 'list' ? 'mk-list' : 'mk-sell', requestId: pv.requestId, contract, tokenId: String(tokenId), market: m.address, site: m.site ?? null, priceBNB: mode === 'list' ? Number(priceBNB) : null, data: call.data, at: Date.now() });
     return { ok: true, step: mode === 'list' ? 'list' : 'sell', id, ...base, priceBNB: mode === 'list' ? Number(priceBNB) : null, changes: pv.changes, risks: pv.risks, sample: call.sample, guessed: call.guessed ?? null, needsAppApproval: pv.requireConfirmation };
   },
   // Sau khi bán: thu hồi quyền cả bộ đã cấp cho chợ (giống "revoke mọi approval" sau khi bán).
@@ -253,8 +253,13 @@ const api = {
       // Chợ ghi lệnh rao bán thành sự kiện (log) của chính hợp đồng chợ. Không có log = giao dịch chạy nhưng có thể chợ không nhận lệnh.
       const rc = await state.provider.getTransactionReceipt(r.txHash).catch(() => null);
       noMarketLog = Boolean(rc) && !rc.logs.some((l) => l.address.toLowerCase() === p.market.toLowerCase());
-      if (noMarketLog) log(`[bán] ⚠ đặt giá ${p.contract} #${p.tokenId}: giao dịch thành công nhưng chợ ${p.market} không ghi sự kiện nào`);
-      else markListed(`${p.contract.toLowerCase()}:${p.tokenId}`, { priceBNB: p.priceBNB, market: p.market, site: p.site, txHash: r.txHash, expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString() });
+      if (noMarketLog) {
+        log(`[bán] ⚠ đặt giá ${p.contract} #${p.tokenId}: giao dịch thành công nhưng chợ ${p.market} không ghi sự kiện nào. Bot sẽ không dùng lại hàm ${p.data.slice(0, 10)} trên chợ này.`);
+        // Hàm này từng tạo được lệnh rao bán (có sự kiện) thì lần này chỉ là đặt lại NFT đã rao: không đánh dấu hỏng.
+        const before = Object.values(listedMap()).some((l) => l.market === p.market && l.selector === p.data.slice(0, 10));
+        if (!before) markBadCall(p.market, p.data, 'không ghi sự kiện rao bán');
+      }
+      else markListed(`${p.contract.toLowerCase()}:${p.tokenId}`, { priceBNB: p.priceBNB, market: p.market, site: p.site, txHash: r.txHash, selector: p.data.slice(0, 10), expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString() });
     }
     // Bán xong mà chợ vẫn giữ quyền cả bộ: gợi ý thu hồi (đặt giá bán thì phải giữ quyền tới khi có người mua).
     const canRevoke = p.kind === 'mk-sell' && done && (await marketApproved(state.provider, p.contract, walletInfo().address, p.market));

@@ -10,6 +10,7 @@
 // 3) Bán ngay: chép đúng giao dịch người khác đã tự bán vào lệnh mua (offer) trên chợ đó (giống học cách mint),
 //    thay số token + địa chỉ ví của họ bằng của bạn. Luôn qua mô phỏng + Binance preview + bạn bấm xác nhận.
 import { Interface, getAddress, ZeroAddress } from 'ethers';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { TOPIC, getLogsChunked, topicToAddress, mapLimit, tryCall } from './chain.js';
 import { verifiedSource, fetchText } from './rules.js';
 import { ELEMENT } from './list.js';
@@ -139,6 +140,17 @@ export async function findInstantSell(provider, market, { me, tokenId }) {
 // - bán vào lệnh mua: người gửi chuyển NFT của chính họ đi, không gửi kèm BNB  → sellSamples
 // - đặt giá bán: NFT không di chuyển, không kèm BNB, dữ liệu gọi hàm có đúng 1 số token của bộ NFT
 //   và đúng 1 số tiền (wei) cũng xuất hiện trong log của chợ (= giá vừa đặt)  → listSamples
+// Hàm từng chạy "thành công" mà chợ không ghi lệnh rao bán nào (vd. hàm xem danh sách list(offset,count,order)): không dùng lại.
+const BAD = 'data/bad-calls.json';
+const badKey = (market, data) => `${market}:${String(data).slice(0, 10)}`.toLowerCase();
+export function badCalls(path = BAD) { try { return JSON.parse(readFileSync(path, 'utf8')); } catch { return {}; } }
+export function markBadCall(market, data, why, path = BAD) {
+  const b = badCalls(path);
+  b[badKey(market, data)] = { why, at: new Date().toISOString() };
+  try { mkdirSync('data', { recursive: true }); writeFileSync(path, JSON.stringify(b, null, 2)); } catch {}
+}
+export const isBadCall = (market, data, b = badCalls()) => Boolean(b[badKey(market, data)]);
+
 const learned = new Map();
 // Chợ chỉ bán 1 bộ NFT (vd. chợ Onchain Agents): lệnh đặt giá chỉ có số token + giá, không có địa chỉ bộ NFT.
 // Nhận ra khi địa chỉ bộ NFT nằm sẵn trong mã chợ (biến immutable) hoặc 1 hàm đọc của chợ trả về nó.
@@ -208,6 +220,7 @@ export async function guessListCall(provider, market, nft, { me, tokenId, priceW
     const fn = f.fragments[0];
     if (!code.includes(fn.selector.slice(2))) continue;
     const data = f.encodeFunctionData(fn, kind === 'single' ? [BigInt(tokenId), BigInt(priceWei)] : [getAddress(nft), BigInt(tokenId), BigInt(priceWei)]);
+    if (isBadCall(market, data)) continue;
     try {
       await provider.call({ from: me, to: market, data, value: 0n });
       return { data, sample: null, guessed: sig };
@@ -217,8 +230,10 @@ export async function guessListCall(provider, market, nft, { me, tokenId, priceW
 }
 
 export async function findListCall(provider, market, samples, { me, tokenId, priceWei, nft, single } = {}) {
+  const bad = badCalls();
   for (const s of samples) {
     const data = adaptList(s, { me, tokenId, priceWei });
+    if (isBadCall(market, data, bad)) continue;
     try {
       await provider.call({ from: me, to: market, data, value: 0n });
       return { data, sample: s.hash };
