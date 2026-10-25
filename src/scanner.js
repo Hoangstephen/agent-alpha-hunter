@@ -8,6 +8,7 @@ import { mapLimit } from './chain.js';
 import { maxQty, unitCostBNB } from './mint.js';
 import { mintStats, recentSales } from './sell.js';
 import { rulesFor, projectPage, webRules } from './rules.js';
+import { siteMarket, refPrices } from './refprice.js';
 
 // Điểm hot: nhiều ví mint khác nhau + tỉ lệ ví Agent ID cao + được nhắc trên X.
 export function alphaScore(row) {
@@ -112,19 +113,29 @@ export async function scanAll(provider, cfg, log = console.log, { walletAddr, bn
   }
   nfts.sort((a, b) => b.hot - a.hot);
 
-  const top = nfts.slice(0, 12);
-  // Bỏ những địa chỉ không phải NFT (ví thường, token ERC-20 được nhắc trên X...).
-  const visible = () => markLookalikes(top.filter((n) => (n.standard && n.standard !== '?') || n.source === 'onchain' || n.source === 'gem-watch').map(({ mintTxs, ...rest }) => rest));
+  // Chỉ giữ NFT có web dự án VÀ web có chợ mua bán: web nhận định NFT có giao dịch được không và giá ra sao.
+  // NFT không có web / web không có chợ thì bỏ qua (chỉ ghi tên + lý do). Xét nhiều hơn để còn đủ NFT sau khi lọc.
+  const top = nfts.slice(0, 24);
+  const isNft = (n) => (n.standard && n.standard !== '?') || n.source === 'onchain' || n.source === 'gem-watch';
+  const visible = () => markLookalikes(top.filter((n) => isNft(n) && !n.skip && n.checked).slice(0, 12).map(({ mintTxs, ...rest }) => rest));
+  const skipped = () => top.filter((n) => n.skip).map((n) => ({ address: n.address, name: n.name ?? null, why: n.skip }));
   let done = 0;
-  const partial = () => ({ nfts: visible(), tokens, partial: true });
-  report('Bước 2/2: kiểm tra giá, giới hạn, rủi ro', { done, total: top.length, result: partial() });
+  const partial = () => ({ nfts: visible(), skipped: skipped(), tokens, partial: true });
+  report('Bước 2/2: kiểm tra web, chợ, giá, rủi ro', { done, total: top.length, result: partial() });
 
   // Mỗi NFT hiện lên giao diện ngay khi kiểm tra xong.
   await mapLimit(top, 4, async (n, i) => {
     // Link X của dự án (từ metadata / trang web), chạy song song, tối đa 8 giây.
-    const page = Promise.race([projectPage(provider, n.address).catch(() => null), new Promise((r) => setTimeout(() => r(null), 8000))]);
+    const pg = await Promise.race([projectPage(provider, n.address).catch(() => null), new Promise((r) => setTimeout(() => r(null), 10_000))]);
+    n.site = pg?.site ?? null;
+    n.market = pg?.site ? await Promise.race([siteMarket(provider, n.address, pg).catch(() => null), new Promise((r) => setTimeout(() => r(null), 15_000))]) : null;
+    if (!n.site || !n.market?.ok) {
+      n.skip = !n.site ? 'no-site' : 'no-market';
+      done += 1;
+      report('Bước 2/2: kiểm tra web, chợ, giá, rủi ro', { done, total: top.length, result: partial() });
+      return;
+    }
     const info = await inspectContract(provider, n.address, cfg, walletAddr).catch(() => null);
-    const pg = await page;
     n.projectX = pg?.x ?? null;
     if (info && info.maxPerWallet == null && pg?.perWallet) Object.assign(info, { maxPerWallet: BigInt(pg.perWallet), perWalletFrom: 'site' });
     // Luật từ web dự án / mã nguồn, tải sẵn cho các thẻ đầu (không phải bấm mở mới thấy).
@@ -135,20 +146,21 @@ export async function scanAll(provider, cfg, log = console.log, { walletAddr, bn
       if (web.description) n.rules.description ??= web.description;
       if (web.checks?.length) n.rules.checks = [...new Set([...(n.rules.checks ?? []), ...web.checks])];
     }
-    // Giá người khác đang trả + giá đang bán được (top 6 để đỡ tốn RPC).
-    if (i < 6) {
-      const [paid, sales] = await Promise.all([
-        n.mintTxs?.length ? mintStats(provider, n.mintTxs, { bnbUsdt }).catch(() => null) : null,
-        recentSales(provider, n.address, { chunk: cfg.scan.chunkByAddress ?? 2000, bnbUsdt, maxTx: 15 }).catch(() => ({ count: 0 })),
-      ]);
-      Object.assign(n, { paid, sales });
-      n.profitBNB = profitBNB(n);
-      n.profitIfFreeBNB = profitIfFreeBNB(n);
-    }
+    // Giá người khác đang trả + giá trên chợ của web: lệnh rao rẻ nhất, giá bán gần đây qua chợ đó, giá ghi trên web.
+    const via = n.market.contract ? [n.market.contract] : null;
+    const [paid, sales, ref] = await Promise.all([
+      n.mintTxs?.length ? mintStats(provider, n.mintTxs, { bnbUsdt }).catch(() => null) : null,
+      recentSales(provider, n.address, { chunk: cfg.scan.chunkByAddress ?? 2000, bnbUsdt, maxTx: 15, via }).catch(() => ({ count: 0 })),
+      Promise.race([refPrices(provider, n.address, { page: pg, market: n.market, wallet: walletAddr }).catch(() => null), new Promise((r) => setTimeout(() => r(null), 25_000))]),
+    ]);
+    Object.assign(n, { paid, sales, ref });
+    n.profitBNB = profitBNB(n);
+    n.profitIfFreeBNB = profitIfFreeBNB(n);
+    n.checked = true;
     done += 1;
-    report('Bước 2/2: kiểm tra giá, giới hạn, rủi ro', { done, total: top.length, result: partial() });
+    report('Bước 2/2: kiểm tra web, chợ, giá, rủi ro', { done, total: top.length, result: partial() });
   });
   const durationMs = Date.now() - t0;
-  log(`[scan] xong sau ${(durationMs / 1000).toFixed(1)}s`);
-  return { nfts: visible(), tokens, scannedAt: new Date().toISOString(), durationMs };
+  log(`[scan] xong sau ${(durationMs / 1000).toFixed(1)}s, bỏ qua ${skipped().length} NFT không có web hoặc chợ trên web`);
+  return { nfts: visible(), skipped: skipped(), tokens, scannedAt: new Date().toISOString(), durationMs };
 }

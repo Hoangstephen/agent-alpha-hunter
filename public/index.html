@@ -135,26 +135,11 @@
 
   <section>
     <h2>Bán NFT đang giữ</h2>
-    <div class="muted">Tìm giá cao nhất cho NFT trong ví: lệnh mua đang chờ trên Element (bán ngay được) và giá bán gần đây trên chain (tham khảo).</div>
+    <div class="muted">Tìm giá cho NFT trong ví từ chợ trên web dự án: giá bán gần đây qua chợ đó, giá rao rẻ nhất và giá ghi trên web. NFT không có chợ trên web thì bỏ qua.</div>
     <div class="bar">
       <input id="sellWallet" placeholder="Ví cần xem (để trống = ví Agentic đang đăng nhập)">
       <input id="sellExtra" placeholder="Thêm địa chỉ NFT (0x…, cách nhau dấu phẩy)">
       <button id="sellBtn" class="primary">Tìm giá bán cao nhất</button>
-    </div>
-    <div class="loginbox" id="listBox">
-      <b>🏷 Đăng bán trên Element ngay từ ví Agentic</b> <span class="muted">(không cần kết nối ví vào web Element)</span>
-      <div class="bar">
-        <input id="elKey" type="password" placeholder="Element API key" autocomplete="off">
-        <button id="elKeyBtn">Lưu key</button> <a href="https://forms.gle/78wpggURGADCjshr7" target="_blank" rel="noopener">Đăng ký key (form của Element)</a> <span id="elKeyInfo" class="muted"></span>
-      </div>
-      <div class="bar">
-        <label><input type="checkbox" id="asOn"> Tự đăng bán NFT mới về ví</label>
-        <label>Lời so với giá mint <input id="asMarkup" type="number" min="0" step="1" style="width:70px"> %</label>
-        <label>Giá sàn <input id="asMin" type="number" min="0" step="0.0001" style="width:90px"> BNB</label>
-        <label>Hạn <input id="asDays" type="number" min="1" max="90" style="width:60px"> ngày</label>
-        <button id="asBtn">Lưu</button> <span id="asInfo" class="muted"></span>
-      </div>
-      <div class="muted">Giá tự đăng = cao nhất trong: giá bán trung vị gần đây, giá mint + % lời, giá sàn. Không có giá tham khảo thì bot không đăng. Mỗi bộ NFT, lần đầu cần cho sàn Element quyền chuyển NFT khi có người mua (bot chỉ cho phép đúng hợp đồng sàn Element). Ký lệnh bán không tốn gas.</div>
     </div>
     <div id="sell"></div>
   </section>
@@ -238,6 +223,14 @@ document.addEventListener('toggle', async (e) => {
   document.querySelectorAll(`details[data-rules="${CSS.escape(a)}"] [data-web]`).forEach((el) => { el.innerHTML = webRulesHtml(a); });
 }, true);
 
+// Chợ mua bán trên web dự án (bot chỉ giữ NFT có chợ này) + giá tham khảo từ chợ đó.
+function marketLine(n) {
+  const m = n.market;
+  if (!m?.ok) return '';
+  const host = (u) => { try { return new URL(u).hostname + (new URL(u).pathname.length > 1 ? new URL(u).pathname : ''); } catch { return u; } };
+  return `<div>🏪 Chợ trên web: <a href="${esc(m.url || n.site)}" target="_blank" rel="noopener"><b>${esc(host(m.url || n.site))}</b></a>${m.contract ? ` <span class="muted">· hợp đồng chợ <a href="https://bscscan.com/address/${esc(m.contract)}" target="_blank" rel="noopener">${esc(short(m.contract))}</a></span>` : ' <span class="muted">· web có mục chợ</span>'}</div>${refBox(n)}`;
+}
+
 function card(n) {
   const HARD_MIN = 40;
   const canMint = n.risk != null && n.risk >= HARD_MIN && n.paused !== true && n.mintFn && (n.maxQty ?? 0) > 0;
@@ -271,7 +264,8 @@ function card(n) {
       ${n.walletPriceBNB != null && n.walletPriceBNB !== n.priceBNB ? `<div>Giá lần mint tới của ví bạn: ${Number(n.walletPriceBNB) === 0 ? '<b class="ok">Miễn phí</b>' : `<b>${money(n.walletPriceBNB)}</b>`}</div>` : ''}
       <div>Người khác đang trả: ${paid}</div>
       ${n.paid?.free && Number(n.priceBNB) > 0 && n.walletPriceBNB == null ? '<div class="muted">ℹ Hợp đồng ghi có giá nhưng người khác đang mint miễn phí (có thể lần đầu free). Bot thử 0 BNB trước, giá thật hiện trong hộp xác nhận.</div>' : ''}
-      <div>Đang bán được: ${sale}</div>
+      ${marketLine(n)}
+      <div>Đang bán được: ${sale}${n.market?.contract ? ' <span class="muted">(qua chợ của web)</span>' : ''}</div>
       ${profit}
       ${n.agentMint ? (n.agent?.ok ? `<div class="ok">✓ Mint theo Agent ID: ${esc(n.agent.name || '#' + n.agent.tokenId.slice(0, 8) + '…')}</div>` : '<div class="warn">Dự án mint theo Agent ID: nhập tên .ai của bạn ở ô "Agent ID của bạn" phía trên rồi bấm Kiểm tra lại</div>') : ''}
       ${n.hasAgentId === true ? '<div class="ok">✓ Ví của bạn có Agent ID</div>' : n.hasAgentId === false ? '<div class="bad">✗ Ví của bạn chưa có Agent ID (dự án agent-only sẽ từ chối)</div>' : ''}
@@ -340,7 +334,9 @@ async function refresh() {
   if (s.scan && s.scan.scannedAt !== shownScan) {
     shownScan = s.scan.scannedAt;
     $('scanInfo').textContent = s.scan.partial ? '· đang cập nhật…' : `· cập nhật ${new Date(s.scan.scannedAt).toLocaleTimeString()}${s.scan.durationMs ? ` · quét mất ${Math.round(s.scan.durationMs / 1000)} giây` : ''}`;
-    $('nfts').innerHTML = s.scan.nfts.length ? s.scan.nfts.map(card).join('') : `<div class="muted">${s.scan.partial ? 'Đang tìm…' : 'Chưa thấy NFT nào mint nóng trong ~10 phút qua.'}</div>`;
+    const sk = s.scan.skipped || [];
+    const skHtml = sk.length ? `<details class="muted" style="margin-top:8px"><summary>Bỏ qua ${sk.length} NFT không có web hoặc web không có chợ</summary>${sk.map((x) => `<div>${esc(x.name || short(x.address))} · <a href="https://bscscan.com/address/${esc(x.address)}" target="_blank" rel="noopener">${esc(short(x.address))}</a> · ${x.why === 'no-site' ? 'không tìm thấy web dự án' : 'web không có chợ mua bán'}</div>`).join('')}</details>` : '';
+    $('nfts').innerHTML = (s.scan.nfts.length ? s.scan.nfts.map(card).join('') : `<div class="muted">${s.scan.partial ? 'Đang tìm…' : 'Chưa thấy NFT nào mint nóng có web và chợ trên web trong ~10 phút qua.'}</div>`) + skHtml;
     document.querySelectorAll('#nfts [data-qty]').forEach((i) => syncQty(i.closest('.card')));
     $('tokens').innerHTML = s.scan.tokens.length
       ? `<table><tr><th>Tên</th><th>Mã</th><th>Token</th><th>Thanh khoản (LP)</th></tr>${s.scan.tokens.slice(0, 8).map((t) => `<tr><td>${esc(t.name)}</td><td>${esc(t.symbol)}</td><td class="addr"><a href="https://bscscan.com/token/${esc(t.address)}" target="_blank" rel="noopener">${esc(short(t.address))}</a></td><td data-lpbox="${esc(t.address)}">${lpResults.get(t.address) ?? `<button data-lp="${esc(t.address)}" data-quote="${esc(t.quote || '')}">Kiểm tra khoá LP</button>`}</td></tr>`).join('')}</table>`
@@ -357,11 +353,18 @@ async function refreshWallet() {
     const dm = w.devInfo || {};
     const exp = dm.expiresAt ? Date.parse(dm.expiresAt) : NaN;
     const left = Number.isFinite(exp) ? Math.round((exp - Date.now()) / 60000) : null;
-    const devTxt = !w.devMode
+    const devTxt = w.devMode == null
+      ? ` <span class="muted">Chưa đọc được Developer Mode (Binance chưa trả lời), bot vẫn chạy bình thường</span>`
+      : w.devMode === false
       ? ` <span class="bad" title="Binance tự tắt Developer Mode khi hết hạn. Bật lại: app Binance → Ví Agentic → Cài đặt → Developer Mode.">Developer Mode đang tắt${dm.balanceExceeded ? ' (số dư ví vượt mức cho phép của Developer Mode)' : Number.isFinite(exp) && exp < Date.now() ? ' (đã hết hạn lúc ' + esc(new Date(exp).toLocaleTimeString()) + ')' : ''}: bật lại trong app Binance → Ví Agentic → Cài đặt</span>`
       : left != null && left < 60 ? ` <span class="warn">Developer Mode tự tắt sau ${left} phút (bật lại trong app Binance)</span>`
       : left != null ? ` <span class="muted">Developer Mode bật tới ${esc(new Date(exp).toLocaleString())}</span>` : '';
-    $('wallet').innerHTML = `<span class="ok">● Ví ${esc(short(w.address || ''))}</span>${devTxt}`;
+    // Giờ Binance tự đăng xuất phiên ví (hết hạn phiên hoặc lâu không dùng): báo trước để không bị bất ngờ.
+    const outs = [dm.sessionExpireAt, dm.inactiveSignOutAt, dm.signInMaxAt].map((x) => (x ? Date.parse(x) : NaN)).filter((t) => Number.isFinite(t) && t > Date.now());
+    const outAt = outs.length ? Math.min(...outs) : null;
+    const outTxt = outAt ? ` <span class="${outAt - Date.now() < 3600_000 ? 'warn' : 'muted'}">· Binance tự đăng xuất ví lúc ${esc(new Date(outAt).toLocaleString())}</span>` : '';
+    const staleTxt = w.stale ? ` <span class="muted" title="${esc(w.staleNote || '')}">· trạng thái lần trước (Binance chưa trả lời)</span>` : '';
+    $('wallet').innerHTML = `<span class="ok">● Ví ${esc(short(w.address || ''))}</span>${devTxt}${outTxt}${staleTxt}`;
     $('walletActions').innerHTML = btn('logoutBtn', 'Đăng xuất');
   } else if (!w.installed) {
     $('wallet').innerHTML = '<span class="bad">● Chưa cài baw (CLI ví Binance)</span>';
@@ -563,19 +566,6 @@ $('confirmBtn').onclick = async () => {
     setTimeout(refreshBalance, 8000);
     return;
   }
-  if (pendingId && String(pendingStep).startsWith('list-')) {
-    $('confirmBtn').disabled = true;
-    $('dlgBody').innerHTML = pendingStep === 'list-approve' ? '<h3>Đang cấp quyền, chờ xác nhận trên chain…</h3>' : '<h3>Đang ký bằng ví Agentic và gửi lên Element…</h3>';
-    const r = await api('/api/list/execute', { id: pendingId });
-    pendingId = null;
-    $('confirmBtn').disabled = false;
-    if (r.ok && r.next === 'list') return startList(pendingList); // sang bước 2
-    $('confirmBtn').hidden = true;
-    $('dlgBody').innerHTML = !r.ok ? `<h3 class="bad">Lỗi</h3><p>${esc(r.error)}</p>`
-      : r.next === 'retry' ? `<h3 class="warn">${esc(r.message)}</h3>`
-      : `<h3 class="ok">Đã đăng bán ✓</h3><a href="${esc(r.url)}" target="_blank" rel="noopener">Xem trên Element</a>`;
-    return;
-  }
   if (!pendingId) return;
   $('confirmBtn').disabled = true;
   $('dlgBody').innerHTML = pendingStep === 'approve' ? '<h3>Đang approve, chờ xác nhận trên chain…</h3>' : '<h3>Đang gửi và chờ xác nhận trên chain…</h3>';
@@ -625,14 +615,13 @@ $('sellBtn').onclick = async () => {
   $('sell').innerHTML = (rows.length
     ? `<table><tr><th>NFT</th><th>Giá cao nhất tìm thấy</th><th>Đăng bán</th><th></th></tr>${rows.map(({ h, it }) => `<tr>
         <td>${esc(h.name || 'NFT')} ${it.tokenId != null ? '#' + esc(String(it.tokenId).length > 12 ? String(it.tokenId).slice(0, 6) + '…' + String(it.tokenId).slice(-4) : it.tokenId) : `(x${esc(h.balance)})`}<div class="addr">${esc(short(h.contract))}</div></td>
-        <td>${fmt(it.best, h)}${refBox(h)}</td>
+        <td>${h.noMarket ? '<span class="muted">Không có chợ trên web dự án: không định giá</span>' : fmt(it.best, h) + refBox(h)}</td>
         <td>${listCell(r, h, it)}</td>
-        <td>${marketLinks(h, it)}${h.site ? `<a href="${esc(h.site)}" target="_blank" rel="noopener"><b>Bán trên web dự án</b></a><br>` : ''}${it.elementUrl ? `<a href="${esc(it.elementUrl)}" target="_blank" rel="noopener">Xem trên Element</a><br>` : ''}<a href="https://bscscan.com/token/${esc(h.contract)}?a=${esc(r.wallet)}" target="_blank" rel="noopener">BscScan</a></td>
+        <td>${marketLinks(h, it)}${h.siteMarket?.ok && !h.siteMarket.contract ? `<a href="${esc(h.siteMarket.url)}" target="_blank" rel="noopener"><b>Đặt giá trên chợ của web</b></a><br>` : ''}${h.site ? `<a href="${esc(h.site)}" target="_blank" rel="noopener">Web dự án</a><br>` : ''}<a href="https://bscscan.com/token/${esc(h.contract)}?a=${esc(r.wallet)}" target="_blank" rel="noopener">BscScan</a></td>
       </tr>`).join('')}</table>`
     : '<div class="muted">Không thấy NFT nào trong ví thuộc các hợp đồng đã kiểm tra. Thêm địa chỉ NFT vào ô bên cạnh rồi thử lại.</div>')
     + (r.sessionNote ? `<p class="warn">⚠ ${esc(r.sessionNote)}</p>` : '')
-    + (r.elementEnabled ? '' : '<p class="muted">ℹ Chưa có Element API key nên chưa đọc được lệnh mua trên Element và chưa đăng bán được. Dán key ở khung phía trên.</p>')
-    + '<p class="muted">ℹ Web Element không hiện nút List cho ví Agentic vì ví này không kết nối được vào web. Bot đăng bán thay bạn: lệnh bán vẫn hiện trên Element như bình thường. Nhiều dự án cũng có chợ riêng ("Bán trên web dự án"). Agent ID (.ai) không bán được nên không hiện ở đây. Tên trên Element (vd. "#153") là tên trong metadata, có thể khác số token ID bot hiện.</p>';
+    + '<p class="muted">ℹ Bot chỉ định giá và bán qua chợ có trên web dự án (không dùng Element hay sàn chung). Agent ID (.ai) không bán được nên không hiện ở đây.</p>';
 };
 
 let lastSell = null;
@@ -648,7 +637,7 @@ function refBox(h) {
 }
 // Chợ riêng của bộ NFT, bot tự tìm từ các giao dịch mua bán gần đây trên chain.
 function marketLinks(h, it) {
-  return (h.markets || []).filter((m) => m.name !== 'Element').map((m) => {
+  return (h.markets || []).map((m) => {
     const sell = m.trust && it?.tokenId != null && !$('sellWallet').value.trim() && !lastSell?.readOnly
       ? `<span class="ok" title="${m.trust.why === 'same-owner' ? 'Chợ và hợp đồng NFT có cùng chủ trên chain' : m.trust.why === 'site' ? 'Web của dự án ghi địa chỉ chợ này' : 'Nhiều người mua đã trả BNB thật qua chợ này'}">✓ ${m.trust.why === 'same-owner' ? 'chợ của dự án' : m.trust.why === 'site' ? 'chợ trên web dự án' : `chợ có ${esc(m.trust.buyers)} người mua thật`}</span><br>
          <input type="text" inputmode="decimal" style="width:80px" placeholder="Giá" value="${esc(it.suggestBNB ?? it.best?.priceBNB ?? '')}" data-mprice> BNB
@@ -663,16 +652,11 @@ function marketLinks(h, it) {
 }
 
 function listCell(r, h, it) {
-  if (it.tokenId == null) return r.canList
-    ? `<span class="muted">Bot chưa tìm ra số token, xem trên BscScan rồi nhập:</span><br><input placeholder="Số token" style="width:90px" data-ltid> <input type="text" inputmode="decimal" style="width:80px" placeholder="Giá" data-lprice> BNB <button class="primary" data-list="${esc(h.contract)}" data-lname="${esc(h.name || 'NFT')}">Đăng bán</button>`
-    : '<span class="muted">Chưa biết số token</span>';
+  if (h.noMarket) return `<span class="muted">${h.noMarket === 'no-site' ? 'Không tìm thấy web dự án' : 'Web dự án không có chợ'}: bỏ qua</span>`;
   if (it.listed?.market) return `<span class="ok">Đã đặt giá ${esc(bnb(it.listed.priceBNB))} BNB trên chợ ${esc(short(it.listed.market))}</span><br><span class="muted">${it.listed.expiresAt ? `tới ${esc(new Date(it.listed.expiresAt).toLocaleDateString())}` : it.listed.at ? `lúc ${esc(new Date(it.listed.at).toLocaleString())}` : ''} ·</span> <a href="https://bscscan.com/tx/${esc(it.listed.txHash)}" target="_blank" rel="noopener">giao dịch</a>`
     + (it.listed.needsApprove ? `<br><span class="warn">⚠ Chợ chưa có quyền cho riêng NFT này nên chưa ai mua được.</span><br><button class="primary" data-msell="${esc(it.listed.market)}" data-mode="approve" data-mnft="${esc(h.contract)}" data-mtid="${esc(it.tokenId)}" data-mname="${esc(h.name || 'NFT')}">Cấp quyền cho NFT này</button>` : '');
-  if (it.listed) return `<span class="ok">Đang bán ${esc(bnb(it.listed.priceBNB))} BNB</span><br><span class="muted">tới ${esc(new Date(it.listed.expiresAt).toLocaleDateString())}</span>`;
-  if (!r.canList) return r.elementEnabled ? '<span class="muted">Đăng nhập ví Agentic để đăng bán</span>'
-    : '<span class="warn">Element bắt buộc có API key mới cho đăng bán.</span><br><span class="muted">Dán key ở khung phía trên, hoặc</span> <a href="https://forms.gle/78wpggURGADCjshr7" target="_blank" rel="noopener">đăng ký key</a>';
-  const p = it.suggestBNB ?? it.best?.priceBNB ?? '';
-  return `<input type="text" inputmode="decimal" style="width:90px" value="${esc(p === '' ? '' : bnb(p, 4))}" data-lprice> BNB <button class="primary" data-list="${esc(h.contract)}" data-tid="${esc(it.tokenId)}" data-lname="${esc(h.name || 'NFT')}">Đăng bán</button>`;
+  if (it.tokenId == null) return '<span class="muted">Chưa biết số token</span>';
+  return h.markets?.length ? '<span class="muted">Đặt giá ở cột chợ bên phải</span>' : '<span class="muted">Đặt giá trên web chợ (link bên phải)</span>';
 }
 
 // Kiểm tra LP token có bị khoá/đốt không. Nhớ kết quả để không mất khi bảng vẽ lại.
@@ -744,61 +728,6 @@ document.addEventListener('click', async (e) => {
   await startMarketSell({ market: b.dataset.msell, mode: b.dataset.mode, priceBNB, contract: b.dataset.mnft, tokenId: b.dataset.mtid, name: b.dataset.mname });
   b.disabled = false;
 });
-
-let pendingList = null;
-async function startList(l) {
-  pendingList = l;
-  const r = await api('/api/list/preview', { contract: l.contract, tokenId: l.tokenId, priceBNB: l.priceBNB, days: l.days });
-  pendingId = r.ok ? r.id : null;
-  pendingStep = r.ok ? 'list-' + r.step : null;
-  $('confirmBtn').hidden = !r.ok;
-  $('confirmBtn').textContent = r.step === 'approve' ? 'Cho phép (bước 1/2)' : 'Ký và đăng bán';
-  const fees = (r.fees || []).map((f) => `${esc(f.label)} ${esc(f.pct)}%: ${esc(bnb(f.bnb, 6))} BNB`).join('<br>');
-  $('dlgBody').innerHTML = !r.ok ? `<h3 style="margin-top:0" class="bad">Không đăng bán được</h3><p>${esc(r.error)}</p>`
-    : r.step === 'approve'
-      ? `<h3 style="margin-top:0">Bước 1/2: cho sàn Element quyền chuyển NFT ${esc(l.name)}</h3>
-         <p>Lần đầu bán bộ NFT này, sàn cần quyền chuyển NFT cho người mua khi có người trả tiền. Bot chỉ cấp quyền này cho đúng hợp đồng sàn Element:</p>
-         <div class="addr">0xb3e3DfCb2d9f3DdE16d78B9e6EB3538Eb32B5ae1</div>
-         ${(r.risks || []).length ? `<p class="bad">⚠ ${r.risks.map(esc).join('<br>⚠ ')}</p>` : '<p class="ok">Binance không báo rủi ro.</p>'}
-         <p class="muted">Tốn một ít gas BNB. Có thể thu hồi sau ở mục Quyền đã cấp.</p>${r.needsAppApproval ? '<p class="warn">Sau khi xác nhận, bạn cần duyệt thêm trong app Binance.</p>' : ''}`
-      : `<h3 style="margin-top:0">Đăng bán ${esc(l.name)} #${esc(String(l.tokenId).length > 12 ? String(l.tokenId).slice(0, 6) + '…' : l.tokenId)}</h3>
-         <p>Giá: <b>${esc(bnb(r.priceBNB, 6))} BNB</b> <span class="muted">${usd(r.priceBNB)}</span></p>
-         <p class="muted">${fees || 'Không có phí'}</p>
-         <p>Bạn nhận về: <b>${esc(bnb(r.receiveBNB, 6))} BNB</b></p>
-         <p class="muted">Lệnh hết hạn ${esc(new Date(r.expiresAt).toLocaleString())}. Ký bằng ví Agentic, không tốn gas. Muốn huỷ sớm: đăng giá mới hoặc huỷ trên Element.</p>`;
-  if (!$('dlg').open) $('dlg').showModal();
-}
-document.addEventListener('click', async (e) => {
-  const b = e.target.closest('[data-list]');
-  if (!b) return;
-  const price = b.parentElement.querySelector('[data-lprice]').value.trim().replace(',', '.');
-  if (!(Number(price) > 0)) return alertBox('Nhập giá bán (BNB).');
-  const tid = b.dataset.tid ?? b.parentElement.querySelector('[data-ltid]')?.value.trim();
-  if (!/^\d{1,78}$/.test(tid ?? '')) return alertBox('Nhập số token (chỉ gồm chữ số).');
-  b.disabled = true;
-  await startList({ contract: b.dataset.list, tokenId: tid, name: b.dataset.lname, priceBNB: price, days: $('asDays').value || 7 });
-  b.disabled = false;
-});
-
-async function loadAutoSell() {
-  const a = await api('/api/autosell').catch(() => null);
-  if (!a) return;
-  $('asOn').checked = a.enabled; $('asMarkup').value = a.markupPct; $('asMin').value = a.minPriceBNB; $('asDays').value = a.days;
-  $('elKeyInfo').textContent = a.hasKey ? '✓ đã có key' : 'chưa có key';
-  $('asInfo').textContent = a.last ? `lượt gần nhất ${new Date(a.last.at).toLocaleTimeString()}: đăng ${a.last.listed} NFT` : '';
-}
-$('elKeyBtn').onclick = async () => {
-  $('elKeyBtn').disabled = true;
-  const r = await api('/api/element-key', { key: $('elKey').value });
-  $('elKeyBtn').disabled = false; $('elKey').value = '';
-  $('elKeyInfo').innerHTML = r.ok ? (r.saved ? '<span class="ok">✓ đã lưu key</span>' : 'đã xoá key') : `<span class="bad">${esc(r.error)}</span>`;
-};
-$('asBtn').onclick = async () => {
-  if ($('asOn').checked && !(Number($('asMin').value) > 0) && !confirm('Chưa đặt giá sàn. Bot vẫn đăng theo giá bán gần đây / giá mint + % lời. Tiếp tục?')) return;
-  const r = await api('/api/autosell', { enabled: $('asOn').checked, markupPct: $('asMarkup').value, minPriceBNB: $('asMin').value, days: $('asDays').value });
-  $('asInfo').innerHTML = r.ok ? (r.enabled ? `<span class="ok">Đã bật${r.hasKey ? '' : ' (thiếu Element API key: chưa chạy được)'}</span>` : 'Đã tắt') : `<span class="bad">${esc(r.error)}</span>`;
-};
-loadAutoSell();
 
 // Số đã mint theo thời gian thực: hỏi lại hợp đồng 15 giây một lần (1 lệnh RPC cho mọi thẻ) cho các thẻ đang hiện.
 setInterval(async () => {
@@ -918,7 +847,7 @@ document.addEventListener('click', (e) => {
     'Xem trước & mint': ['Preview & mint', '预览并铸造'],
     'NFT đang hot': ['Hot NFTs', '热门 NFT'],
     'Bán NFT đang giữ': ['Sell NFTs you hold', '出售持有的 NFT'],
-    'Tìm giá cao nhất cho NFT trong ví: lệnh mua đang chờ trên Element (bán ngay được) và giá bán gần đây trên chain (tham khảo).': ['Find the best price for NFTs in your wallet: open bids on Element (instant sell) and recent on-chain sales (reference).', '为钱包中的 NFT 寻找最高价：Element 上的挂单买价（可立即卖出）和链上近期成交价（参考）。'],
+    'Tìm giá cho NFT trong ví từ chợ trên web dự án: giá bán gần đây qua chợ đó, giá rao rẻ nhất và giá ghi trên web. NFT không có chợ trên web thì bỏ qua.': ['Price the NFTs in your wallet from the market on the project website: recent sales through that market, the cheapest listing and prices written on the site. NFTs without a market on their website are skipped.', '根据项目网站上的市场为钱包中的 NFT 定价：该市场近期成交价、最低挂单价及网站标价。网站没有市场的 NFT 将被跳过。'],
     'Tìm giá bán cao nhất': ['Find best sell price', '查找最高售价'],
     'Quyền token đã cấp (approve)': ['Token approvals', '已授权的代币权限 (approve)'],
     'Xem quyền đã cấp': ['View approvals', '查看授权'],
@@ -957,7 +886,6 @@ document.addEventListener('click', (e) => {
     'Preview hết hạn sau ~4 phút.': ['Preview expires in ~4 minutes.', '预览约 4 分钟后过期。'],
     'Xem trên BscScan': ['View on BscScan', '在 BscScan 查看'],
     'Bán trên web dự án': ['Sell on project site', '在项目网站出售'],
-    'Xem trên Element': ['View on Element', '在 Element 查看'],
     'Lỗi': ['Error', '错误'],
     'Làm mới': ['Refresh', '刷新'],
     'Số dư ví': ['Wallet balance', '钱包余额'],

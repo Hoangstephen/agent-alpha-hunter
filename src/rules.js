@@ -90,10 +90,30 @@ function safeUrl(u) {
 export async function fetchText(u, fetchFn, max = 600_000) {
   const url = safeUrl(u);
   if (!url) return null;
+  if (process.env.FAKE_FETCH) return JSON.parse(process.env.FAKE_FETCH)[url] ?? null; // chỉ dùng trong test (web giả)
   const r = await fetchFn(url, { redirect: 'follow', signal: AbortSignal.timeout(7000), headers: { accept: 'text/html,application/json' } });
   if (!r.ok) return null;
   const t = await r.text();
   return t.slice(0, max);
+}
+
+// HTML trang + tối đa 8 file JS cùng tên miền (web dạng app chỉ có menu, link, địa chỉ hợp đồng trong file JS). Lưu đệm 30 phút.
+const stcache = new Map();
+export async function siteTexts(site, html, fetchFn = fetch) {
+  if (!site) return [];
+  const key = `${site}|${html == null ? '' : String(html).length}`;
+  const hit = stcache.get(key);
+  if (hit && Date.now() - hit.at < 30 * 60_000) return hit.v;
+  let base;
+  try { base = new URL(site); } catch { return []; }
+  html = html ?? (await fetchText(site, fetchFn).catch(() => '')) ?? '';
+  const root = (h) => h.split('.').slice(-2).join('.');
+  const srcs = [...String(html).matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => { try { return new URL(m[1], base); } catch { return null; } })
+    .filter((u) => u && u.protocol === 'https:' && root(u.hostname) === root(base.hostname)).slice(0, 8);
+  const js = await Promise.all(srcs.map((u) => fetchText(u.href, fetchFn, 5_000_000).catch(() => null)));
+  const v = [String(html), ...js.filter(Boolean)];
+  stcache.set(key, { at: Date.now(), v });
+  return v;
 }
 
 async function readJsonUri(uri, fetchFn) {

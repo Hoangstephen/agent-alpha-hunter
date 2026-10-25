@@ -43,6 +43,7 @@ const calls = {
   [sel('maxSupply()')]: () => coder.encode(['uint256'], [1000n]),
   [sel('name()')]: () => coder.encode(['string'], ['Test <b>Robots</b>']),
   [sel('symbol()')]: () => coder.encode(['string'], ['TR']),
+  [sel('contractURI()')]: () => coder.encode(['string'], ['data:application/json,{"external_link":"https://robots.example.com/"}']),
   [sel('paused()')]: () => coder.encode(['bool'], [false]),
   [sel('balanceOf(address)')]: () => coder.encode(['uint256'], [1n]),
   [sel('tokenOfOwnerByIndex(address,uint256)')]: () => coder.encode(['uint256'], [7n]),

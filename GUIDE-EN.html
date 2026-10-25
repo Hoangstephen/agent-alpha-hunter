@@ -29,7 +29,7 @@
   <li><b>Shows everything before you mint:</b> contract price, what others are paying, current sale price, estimated profit, live minted count, per-wallet limit, safety score 0–100.</li>
   <li><b>Project rules for every NFT</b>, read from the contract and the project website, plus the project's X link.</li>
   <li><b>One-click mint:</b> pick a quantity, press Mint, confirm. A "wait for mint to open" button alerts you when minting starts.</li>
-  <li><b>Sell and clean up:</b> find the best sell price for NFTs you hold, list them on Element straight from the Agentic Wallet (with optional auto-listing), check whether a gang.fun token's liquidity (LP) is locked or burned, view and revoke token approvals.</li>
+  <li><b>Sell and clean up:</b> find the best sell price for NFTs you hold, price and list them through the market on the project's website, check whether a gang.fun token's liquidity (LP) is locked or burned, view and revoke token approvals.</li>
   <li><b>🔥 Hot</b> (0–100) shows how much attention a project gets (minting wallets, Agent ID ratio, mentions on X). It is not a safety score. <b>💎 Gem</b> marks Agent-ID-only projects that mint slowly and few people know about yet.</li>
   <li><b>Lookalike warning:</b> when two contracts share a name, the one with fewer mints gets a red "possible fake" warning.</li>
   <li><b>Learns how to mint:</b> if a contract uses an unusual mint function, the bot copies the call from someone else's successful mint (swapping in your wallet and Agent ID). You still confirm every mint.</li>
@@ -81,17 +81,15 @@
 <p>Contracts whose <code>mint()</code> gives 1 NFT per call: choose 3 and the bot sends 3 transactions one after another, each confirmed separately. The price is probed each time because the first mint may be free.</p>
 
 
-<h2>List NFTs on Element (Agentic Wallet)</h2>
-<p>Element's website shows no List button for the Agentic Wallet because that wallet can't connect to the site. The bot lists for you, and the listing shows on Element as usual.</p>
-<ol>
-  <li>Get a free <b>Element API key</b> at Element's request form: <a href="https://forms.gle/78wpggURGADCjshr7" target="_blank" rel="noopener">https://forms.gle/78wpggURGADCjshr7</a> (questions: api@element.market), paste it into <b>Element API key</b> in the Sell section → <b>Save key</b>.</li>
-  <li>Press <b>Find best sell price</b>. Each NFT gets a price box (pre-filled with a suggested price) and a <b>List</b> button.</li>
-  <li>First time for each collection: step 1/2 lets Element transfer the NFT when someone buys (small gas fee). The bot only allows this for Element's exchange contract <code>0xb3e3DfCb2d9f3DdE16d78B9e6EB3538Eb32B5ae1</code>.</li>
-  <li>The confirm box shows the price, marketplace fee, royalty and the BNB you receive → <b>Sign and list</b> (no gas).</li>
-</ol>
-<p><b>Auto-listing</b> (off by default): tick it, set your markup over mint price, a floor price and days → <b>Save</b>. Every 15 minutes the bot lists NFTs not yet listed at the highest of: recent median sale price, mint price + markup, floor price. With no reference price it doesn't list. On a VPS: <code>node src/index.js element-key --key KEY</code> then <code>node src/index.js autosell --on --markup 30 --min 0.01</code>.</p>
+<h2>Only NFTs with a website and a market on it</h2>
+<ul>
+  <li>When scanning, the bot finds each NFT's website (metadata, source code, domain) and reads it to see whether the project has a <b>market</b>: the site lists the market contract address, or has a Market / Marketplace / Trade section. Links to Element, OpenSea and similar don't count.</li>
+  <li>NFTs without a website, or whose website has no market, are <b>skipped</b>. Their names and the reason are in the "Skipped … NFTs" line at the end of the list.</li>
+  <li>Each NFT card shows a <b>🏪 Market on website</b> line (market link) and reference prices from that market. The bot no longer uses Element.</li>
+  <li>Agentic Wallet: when Binance returns a temporary error (network, too many requests), the bot keeps the last known state instead of logging you out or wrongly saying "Developer Mode off". The wallet line shows when Binance will sign the wallet session out.</li>
+</ul>
 
-<h2>Sell on a project's own market (no Element needed)</h2>
+<h2>Sell on the project website's market</h2>
 <ul>
   <li>Click <b>Find best sell price</b>. The bot finds the market where the collection trades (for example BN World's Onchain Agents market). A <b>✓ project market</b> badge means the bot verified it: same owner as the NFT contract, listed on the project's site, or 5+ real buyers.</li>
   <li><b>Reference prices</b> (under the price column): the bot reads the cheapest live listing by other sellers on the project market (only unexpired listings whose seller still holds the NFT) and prices written on the project / market website (Floor, Price…). The suggested price never goes below that cheapest listing. Website prices may be outdated, double-check them.</li>

@@ -190,8 +190,10 @@ export async function prepareMint(provider, cfg, address, { qty = 1, fn, args, v
 }
 
 function checkWallet() {
-  if (wallet.walletStatus() !== 'CONNECTED') return 'Ví chưa đăng nhập. Chạy: baw auth signin rồi quét QR trong app Binance.';
-  if (!wallet.devModeEnabled()) return 'Developer Mode đang tắt. Bật trong app Binance → Agentic Wallet.';
+  let status;
+  try { status = wallet.walletStatus(); } catch (e) { if (e.auth || e.code === 'BAW_MISSING') return 'Ví chưa đăng nhập. Bấm "Đăng nhập ví" rồi quét QR trong app Binance.'; status = 'CONNECTED'; } // lỗi thoáng qua: để Binance preview tự kiểm
+  if (status !== 'CONNECTED') return 'Ví chưa đăng nhập. Bấm "Đăng nhập ví" rồi quét QR trong app Binance.';
+  if (wallet.devModeEnabled() === false) return 'Developer Mode đang tắt. Bật trong app Binance → Agentic Wallet.';
   return null;
 }
 

@@ -18,8 +18,7 @@ import { bnbUsdt } from './price.js';
 import { sellReport } from './sell.js';
 import { lpLock } from './lp.js';
 import { findMarkets, trustMarket, findInstantSell, approveTokenData, revokeMarketData, marketApproved, previewMarketCall, learnMarket, findListCall, markBadCall, onchainListings } from './markets.js';
-import { buildListing, checkListing, signListing, postListing, previewApproveElement, elementApi } from './list.js';
-import { autoSellConfig, saveAutoSell, autoSellTick, listedMap, markListed, mintCostBNB, suggestPrice } from './autosell.js';
+import { listedMap, markListed, mintCostBNB, suggestPrice } from './listed.js';
 import { webRules, projectPage, translateTo } from './rules.js';
 import { notifyScan } from './telegram.js';
 import { watchList, watchAdd } from './watch.js';
@@ -52,25 +51,50 @@ const big = (_, v) => (typeof v === 'bigint' ? v.toString() : v);
 
 // Địa chỉ ví Agentic dùng lần gần nhất (chỉ là địa chỉ công khai): phiên ví hết hạn vẫn xem được NFT và giá.
 function lastWallet() { try { return JSON.parse(readFileSync('data/last-wallet.json', 'utf8')).address ?? null; } catch { return null; } }
-// Mỗi lần hỏi ví là 3 lệnh baw (mỗi lệnh ~0,5–1 giây trên Windows): nhớ kết quả 10 giây.
+// Mỗi lần hỏi ví là 3 lệnh baw (mỗi lệnh ~0,5–1 giây, mỗi lệnh gọi API Binance): nhớ trạng thái 15 giây,
+// cài đặt Developer Mode 60 giây. Hỏi dồn dập dễ bị Binance trả lỗi tạm thời (429).
 let walletCache = null;
 function walletInfo({ fresh = false } = {}) {
-  if (!fresh && walletCache && Date.now() - walletCache.at < 10_000) return walletCache.v;
+  if (!fresh && walletCache && Date.now() - walletCache.at < 15_000) return walletCache.v;
   const v = readWallet();
   walletCache = { at: Date.now(), v };
   return v;
 }
+// Trạng thái tốt gần nhất: Binance lỗi thoáng qua thì dùng lại (tối đa 15 phút), không báo "chưa đăng nhập" hay "Developer Mode tắt" nhầm.
+let good = null;
+let devCache = null;
+const STALE_MS = 15 * 60_000;
+function readDev() {
+  if (devCache && Date.now() - devCache.at < 60_000) return devCache.v;
+  try {
+    const v = wallet.devModeInfo();
+    if (v.enabled == null && devCache) v.enabled = devCache.v.enabled; // Binance không gửi devMode lần này: giữ giá trị cũ
+    devCache = { at: Date.now(), v };
+    return v;
+  } catch (e) {
+    if (e.auth) throw e;
+    if (devCache && Date.now() - devCache.at < STALE_MS) return { ...devCache.v, stale: true };
+    return { enabled: null, error: e.message };
+  }
+}
 function readWallet() {
   try {
     let status;
-    try { status = wallet.walletStatus(); } catch (e) { if (e.code === 'BAW_MISSING') throw e; status = wallet.walletStatus(); } // lỗi thoáng qua: thử lại 1 lần
-    if (status !== 'CONNECTED') return { installed: true, connected: false, status, last: lastWallet(), hint: `Phiên ví Agentic ${status ? `đang ở trạng thái ${status}` : 'chưa có'}: bấm "Đăng nhập ví" rồi quét QR trong app Binance` };
-    const address = cfg.walletAddress || wallet.bscAddress(cfg.binanceChainId);
+    try { status = wallet.walletStatus(); } catch (e) {
+      if (e.code === 'BAW_MISSING' || e.auth) throw e;
+      if (good && Date.now() - good.at < STALE_MS) return { ...good.v, stale: true, staleNote: `Binance chưa trả lời (${e.message}), đang dùng trạng thái lúc ${new Date(good.at).toLocaleTimeString()}` };
+      throw e;
+    }
+    if (status !== 'CONNECTED') { good = null; devCache = null; return { installed: true, connected: false, status, last: lastWallet(), hint: `Phiên ví Agentic ${status ? `đang ở trạng thái ${status}` : 'chưa có'}: bấm "Đăng nhập ví" rồi quét QR trong app Binance` }; }
+    const address = cfg.walletAddress || good?.v.address || wallet.bscAddress(cfg.binanceChainId);
     if (address && address !== lastWallet()) { try { mkdirSync('data', { recursive: true }); writeFileSync('data/last-wallet.json', JSON.stringify({ address })); } catch {} }
-    const dm = wallet.devModeInfo();
-    return { installed: true, connected: true, address, devMode: dm.enabled, devInfo: dm };
+    const dm = readDev();
+    const v = { installed: true, connected: true, address, devMode: dm.enabled, devInfo: dm };
+    good = { at: Date.now(), v };
+    return v;
   } catch (e) {
-    return { installed: e.code !== 'BAW_MISSING', connected: false, last: lastWallet(), hint: e.message };
+    if (e.auth) { good = null; devCache = null; }
+    return { installed: e.code !== 'BAW_MISSING', connected: false, last: lastWallet(), hint: e.auth ? 'Phiên ví Agentic đã hết (Binance đăng xuất): bấm "Đăng nhập ví" rồi quét QR trong app Binance' : e.message };
   }
 }
 
@@ -86,7 +110,7 @@ async function startLogin() {
   wallet.verify(qrCodeId)
     .then((v) => { state.login = v.success ? { pending: false, done: true } : { pending: false, error: v.error?.message ?? 'Mã QR hết hạn, bấm Đăng nhập lại.' }; })
     .catch((e) => { state.login = { pending: false, error: e.message }; })
-    .finally(() => { walletCache = null; log(`[ví] đăng nhập: ${state.login.done ? 'thành công' : state.login.error}`); });
+    .finally(() => { walletCache = null; good = null; devCache = null; log(`[ví] đăng nhập: ${state.login.done ? 'thành công' : state.login.error}`); });
   return state.login;
 }
 
@@ -123,24 +147,6 @@ async function runScan() {
   }
 }
 
-// Tự đăng bán (nếu bật): chạy mỗi everyMin phút, không chạy chồng lượt.
-async function runAutoSell() {
-  const a = autoSellConfig();
-  if (!a.enabled || state.autoSelling || (state.nextAutoSellAt && Date.now() < state.nextAutoSellAt)) return;
-  state.autoSelling = true;
-  state.nextAutoSellAt = Date.now() + a.everyMin * 60_000;
-  try {
-    const w = walletInfo();
-    if (!w.connected) return;
-    const done = await autoSellTick(state.provider, cfg, w.address, { scanNfts: state.scan?.nfts, bnbUsdt: state.price?.price, log });
-    state.autoSell = { at: new Date().toISOString(), listed: done.length };
-  } catch (e) {
-    log(`[tự bán] lỗi: ${e.message}`);
-  } finally {
-    state.autoSelling = false;
-  }
-}
-
 const api = {
   'GET /api/state': () => ({
     rpc: state.provider?.url, logsRpc: state.provider?.logsUrl, customRpc: Boolean(cfg.rpcUrl), scanning: state.scanning, progress: state.progress, lastScanMs: state.lastScanMs, nextScanAt: state.nextScanAt ?? null, scanEveryMin: SCAN_EVERY_MS / 60_000, scan: state.scan, logs: logs.slice(-15),
@@ -168,9 +174,8 @@ const api = {
     const r = await sellReport(state.provider, cfg, addr, contracts, { bnbUsdt: state.price?.price, log, mintTxs: new Ledger().rows });
     // Lệnh bán đang treo (bot đã đăng) + giá gợi ý để đăng bán.
     const listed = listedMap();
-    const a = autoSellConfig();
     for (const h of r.holdings) {
-      const suggest = suggestPrice({ medianBNB: h.sales?.medianBNB, costBNB: mintCostBNB(h.contract), floorBNB: h.ref?.floorBNB }, a);
+      const suggest = suggestPrice({ medianBNB: h.sales?.medianBNB, costBNB: mintCostBNB(h.contract), floorBNB: h.ref?.floorBNB });
       // Lệnh rao bán trên chợ riêng, đọc từ chain (kể cả lệnh đặt bằng bản cũ / máy khác).
       const chainListed = new Map();
       if (!manual) for (const mk of (h.markets ?? []).filter((x) => x.trust)) {
@@ -186,18 +191,7 @@ const api = {
         it.suggestBNB = suggest;
       }
     }
-    return { ok: true, ...r, canList: Boolean(cfg.elementKey) && !manual && !sessionNote, readOnly: Boolean(manual || sessionNote), sessionNote };
-  },
-  // Element API key: thử gọi Element trước, chạy được mới lưu vào data/element.json. Để trống = xoá.
-  'POST /api/element-key': async ({ key }) => {
-    key = String(key ?? '').trim();
-    if (!key) { rmSync('data/element.json', { force: true }); cfg.elementKey = process.env.ELEMENT_API_KEY || ''; return { ok: true, saved: false }; }
-    if (!/^[\w-]{8,128}$/.test(key)) return { ok: false, error: 'Key không đúng định dạng' };
-    try { await elementApi({ elementKey: key }, '/openapi/v1/orders/confData?chain=bsc'); } catch (e) { return { ok: false, error: `Element không nhận key: ${e.message}` }; }
-    mkdirSync('data', { recursive: true });
-    writeFileSync('data/element.json', JSON.stringify({ key }));
-    cfg.elementKey = key;
-    return { ok: true, saved: true };
+    return { ok: true, ...r, readOnly: Boolean(manual || sessionNote), sessionNote };
   },
   // Bán ngay trên chợ riêng của dự án (chỉ chợ có cùng chủ với hợp đồng NFT). Bước 1: preview.
   'POST /api/market/preview': async ({ contract, tokenId, market, mode = 'sell', priceBNB }) => {
@@ -297,53 +291,6 @@ const api = {
     if (!isAddress(token)) return { ok: false, error: 'Địa chỉ token không hợp lệ' };
     return { ok: true, ...(await lpLock(state.provider, token, { quote: isAddress(quote) ? quote : undefined })) };
   },
-  'GET /api/autosell': () => ({ ...autoSellConfig(), hasKey: Boolean(cfg.elementKey), last: state.autoSell ?? null }),
-  'POST /api/autosell': (v) => {
-    const c = saveAutoSell(v);
-    log(`[tự bán] ${c.enabled ? `BẬT: giá ≥ max(trung vị gần đây, giá mint +${c.markupPct}%${c.minPriceBNB ? `, ${c.minPriceBNB} BNB` : ''}), tối đa ${c.maxPerRun} NFT/lượt` : 'TẮT'}`);
-    if (c.enabled) state.nextAutoSellAt = Date.now() + 5000;
-    return { ok: true, ...c, hasKey: Boolean(cfg.elementKey) };
-  },
-  // Đăng bán 1 NFT. Bước 1: tạo lệnh + kiểm tra, trả về tóm tắt (giá, phí, nhận về) để bạn xác nhận.
-  'POST /api/list/preview': async ({ contract, tokenId, priceBNB, days }) => {
-    const w = walletInfo();
-    if (!w.connected) return { ok: false, error: w.hint };
-    if (!isAddress(contract) || !/^\d{1,78}$/.test(String(tokenId))) return { ok: false, error: 'NFT không hợp lệ' };
-    if (!/^\d{1,6}(\.\d{1,18})?$/.test(String(priceBNB)) || Number(priceBNB) <= 0) return { ok: false, error: 'Giá bán không hợp lệ' };
-    const l = await buildListing(state.provider, cfg, { maker: w.address, contract, tokenId, priceBNB, days });
-    const base = { priceBNB: l.priceBNB, receiveBNB: l.receiveBNB, fees: l.fees, expiresAt: l.expiresAt, days: l.days, contract, tokenId: String(tokenId) };
-    const id = randomUUID();
-    if (l.needsApproval) {
-      const pa = previewApproveElement(cfg, w.address, contract);
-      if (!pa.ok) return pa;
-      state.pending.set(id, { kind: 'list-approve', maker: w.address, contract, requestId: pa.requestId, at: Date.now() });
-      return { ok: true, step: 'approve', id, ...base, risks: pa.risks, needsAppApproval: pa.requireConfirmation };
-    }
-    const errs = checkListing(l, { maker: w.address, contract, tokenId, priceBNB, minPriceBNB: autoSellConfig().minPriceBNB });
-    if (errs.length) return { ok: false, error: errs.join(' · ') };
-    state.pending.set(id, { kind: 'list', maker: w.address, listing: l, contract, tokenId: String(tokenId), at: Date.now() });
-    return { ok: true, step: 'list', id, ...base };
-  },
-  // Bước 2: bạn bấm Xác nhận. Cấp quyền (lần đầu) hoặc ký lệnh bán + gửi lên Element.
-  'POST /api/list/execute': async ({ id }) => {
-    const p = state.pending.get(id);
-    state.pending.delete(id);
-    if (!p || Date.now() - p.at > PREVIEW_TTL_MS) return { ok: false, error: 'Lệnh đã hết hạn, bấm Đăng bán lại.' };
-    if (p.kind === 'list-approve') {
-      const r = executeApprove(p.requestId);
-      if (!r.ok) return r;
-      if (!r.txHash) return { ok: true, next: 'retry', message: 'Duyệt cấp quyền trong app Binance, rồi bấm Đăng bán lại.' };
-      log(`[bán] cấp quyền Element cho ${p.contract}: ${r.txHash}`);
-      const done = await waitReceipt(state.provider, r.txHash);
-      return done ? { ok: true, next: 'list' } : { ok: false, error: 'Cấp quyền chưa được xác nhận trên chain, thử lại sau ít phút.' };
-    }
-    if (p.kind !== 'list') return { ok: false, error: 'Sai loại lệnh' };
-    const sig = await signListing(cfg, p.maker, p.listing.typedData);
-    const posted = await postListing(cfg, p.listing.typedData, sig);
-    markListed(`${p.contract.toLowerCase()}:${p.tokenId}`, { priceBNB: p.listing.priceBNB, receiveBNB: p.listing.receiveBNB, orderId: posted.orderId, expiresAt: p.listing.expiresAt });
-    log(`[bán] đã đăng ${p.contract} #${p.tokenId} giá ${p.listing.priceBNB} BNB trên Element`);
-    return { ok: true, ...posted };
-  },
   'GET /api/wallet': () => ({ ...walletInfo({ fresh: Boolean(state.login?.pending) }), login: state.login, install: state.install }),
   // Số dư: lấy từ baw (có giá USD), nếu lỗi thì đọc số dư BNB trực tiếp trên chain.
   'GET /api/balance': async () => {
@@ -363,7 +310,7 @@ const api = {
   },
   'POST /api/baw/install': () => startInstall(),
   'POST /api/login': () => startLogin(),
-  'POST /api/logout': () => { state.login = null; walletCache = null; return wallet.signout(); },
+  'POST /api/logout': () => { state.login = null; walletCache = null; good = null; devCache = null; return wallet.signout(); },
   // Chế độ "Chờ mở mint": gọi thử mint (eth_call, không gửi gì) để biết mint đã mở với ví này chưa.
   'POST /api/probe': async ({ address }) => {
     const w = walletInfo();
@@ -571,5 +518,4 @@ server.listen(PORT, '127.0.0.1', () => {
   openBrowser(url);
   runScan();
   setInterval(() => { if (state.nextScanAt && Date.now() >= state.nextScanAt) runScan(); }, 5000);
-  setInterval(runAutoSell, 5000);
 });

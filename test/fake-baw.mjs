@@ -4,7 +4,9 @@ const a = process.argv.slice(2).join(' ');
 const out = (o) => console.log(JSON.stringify(o));
 if (a.startsWith('wallet status')) out({ success: true, data: { status: process.env.FAKE_DISCONNECTED ? 'UNCONNECTED' : 'CONNECTED' } });
 else if (a.startsWith('wallet address')) out({ success: true, data: { addresses: [{ binanceChainId: '56', address: '0x1111111111111111111111111111111111111111' }] } });
-else if (a.startsWith('wallet settings')) out({ success: true, data: { devMode: { enabled: true } } });
+else if (a.startsWith('wallet settings') && process.env.FAKE_SETTINGS === 'fail') out({ success: false, error: { code: 1001001, name: 'UNKNOWN_ERROR', message: 'Too Many Requests' } });
+else if (a.startsWith('wallet settings') && process.env.FAKE_SETTINGS === 'expired') out({ success: false, error: { code: 10003002, name: 'SESSION_EXPIRED', message: 'Session expired' } });
+else if (a.startsWith('wallet settings')) out({ success: true, data: { devMode: { enabled: true, expiresAt: '2026-10-26 17:30:00 (+07:00)' }, inactiveSignOutTime: '2026-10-25 23:00:00 (+07:00)' } });
 else if (a.startsWith('contract-call preview')) {
   const evil = process.env.FAKE_AUTHORITY === '1';
   out({ success: true, data: { requestId: /--to 0x55d398326f99059fF775485246999027B3197955/i.test(a) ? 'req-approve' : 'req-1', parsedTx: { transactionType: 'ContractCall' }, simulationResult: { balanceChanges: [], allowanceChanges: evil ? [{ spender: '0xbad' }] : [], authorityChanges: [] }, risks: { riskDetails: [], addresses: {} }, requireConfirmation: false } });

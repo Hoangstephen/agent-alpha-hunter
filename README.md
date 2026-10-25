@@ -68,15 +68,10 @@ Trình duyệt tự mở `http://127.0.0.1:3777`. Ở đó bạn có:
 - **Giá**: giá đọc từ hợp đồng (BNB hoặc USDT/USDC, free mint hiện "Miễn phí"), **giá người khác đang thật sự trả** (đọc từ 10 giao dịch mint gần nhất, kèm phí gas), **giá đang bán được** (trung vị/cao nhất gần đây) và **lãi ước tính mỗi NFT**.
 - **Mint**: bấm → Binance mô phỏng → hiện tổng tiền + cảnh báo → bấm **Xác nhận mint** mới gửi. Mint trả bằng USDT có thêm bước 1 là approve **đúng số tiền** cho **đúng hợp đồng NFT** (không approve vô hạn).
 - **Ô dán địa chỉ**: thấy NFT nào trên X thì dán địa chỉ 0x vào để kiểm tra và mint.
-- **Bán NFT đang giữ**: bấm "Tìm giá bán cao nhất". Bot tìm NFT trong ví (NFT đã mint qua bot, NFT đang hot, hoặc địa chỉ bạn thêm) rồi so giá:
-  - lệnh mua đang chờ trên **Element** (bán ngay được, cần `ELEMENT_API_KEY`);
-  - **giá bán gần đây trên chain** (cao nhất và trung vị, đọc từ giao dịch trả BNB/WBNB/USDT cho người bán).
-- **🏷 Đăng bán trên Element từ ví Agentic** (không cần kết nối ví vào web Element): dán Element API key (miễn phí, đăng ký ở form https://forms.gle/78wpggURGADCjshr7), nhập giá, bấm **Đăng bán** → xem giá, phí sàn, bản quyền, số BNB nhận về → **Ký và đăng bán**. Lệnh bán được ký bằng `baw sign-message` (EIP-712, không tốn gas) rồi gửi lên Element, hiện trên Element như lệnh bình thường.
-  - Lần đầu với mỗi bộ NFT: cấp `setApprovalForAll` cho sàn (tốn ít gas). Bot **chỉ** cho phép cấp quyền này cho đúng hợp đồng sàn Element `0xb3e3DfCb2d9f3DdE16d78B9e6EB3538Eb32B5ae1`, không cho địa chỉ nào khác.
-  - Trước khi ký, bot kiểm lại lệnh: người bán là ví bạn, nhận BNB, không chỉ định người mua riêng, đúng NFT, đúng giá, phí ≤ 20%, không thấp hơn giá sàn bạn đặt. Chữ ký trả về cũng được kiểm lại là của ví bạn.
-- **Chợ riêng của NFT** (không cần Element): bot đọc các giao dịch mua bán gần đây của bộ NFT để tìm hợp đồng chợ mà mọi người đang dùng (vd. agentpunk.fun), hiện link web của chợ (nếu mã nguồn chợ có ghi) hoặc link BscScan, kèm số giao dịch và số người bán. Chợ nào có **cùng chủ (owner) với hợp đồng NFT** (tức do chính đội dự án làm) thì hiện 2 nút: **Đặt giá bán** (rao bán ở giá bạn nhập) và **Bán ngay vào lệnh mua** (offer đang có). Lần đầu cho chợ quyền chuyển NFT. Bot học cách gọi hàm từ giao dịch thật gần đây của người khác trên chợ (đọc log của chợ: đặt giá = NFT không di chuyển, có đúng 1 số token và 1 số tiền trùng với log; bán = người gửi chuyển NFT của mình đi), thay số token / giá / ví, rồi mô phỏng + Binance preview trước khi bạn bấm. Chợ khác chủ thì bot chỉ hiện link, không cấp quyền (drainer trông giống hệt chợ trên chain).
+- **Chỉ NFT có web + chợ trên web**: khi quét, bot tìm web dự án (metadata, mã nguồn, tên miền) rồi đọc web xem có **chợ** không (web ghi địa chỉ hợp đồng chợ, hoặc có mục Market / Marketplace / Trade cùng tên miền; link tới Element, OpenSea… không tính). NFT không có web hoặc web không có chợ thì **bỏ qua** (ghi tên + lý do ở cuối danh sách). Không dùng Element.
+- **Bán NFT đang giữ**: bấm "Tìm giá bán cao nhất". Bot tìm NFT trong ví (NFT đã mint qua bot, NFT đang hot, hoặc địa chỉ bạn thêm) rồi định giá **chỉ từ chợ trên web dự án**: giá bán gần đây qua chợ đó, giá rao rẻ nhất, giá ghi trên web.
+- **Chợ của NFT**: bot đọc các giao dịch mua bán gần đây của bộ NFT để tìm hợp đồng chợ mà mọi người đang dùng (vd. agentpunk.fun), hiện link web của chợ (nếu mã nguồn chợ có ghi) hoặc link BscScan, kèm số giao dịch và số người bán. Chợ nào có **cùng chủ (owner) với hợp đồng NFT** (tức do chính đội dự án làm) thì hiện 2 nút: **Đặt giá bán** (rao bán ở giá bạn nhập) và **Bán ngay vào lệnh mua** (offer đang có). Lần đầu cho chợ quyền chuyển NFT. Bot học cách gọi hàm từ giao dịch thật gần đây của người khác trên chợ (đọc log của chợ: đặt giá = NFT không di chuyển, có đúng 1 số token và 1 số tiền trùng với log; bán = người gửi chuyển NFT của mình đi), thay số token / giá / ví, rồi mô phỏng + Binance preview trước khi bạn bấm. Chợ khác chủ thì bot chỉ hiện link, không cấp quyền (drainer trông giống hệt chợ trên chain).
 - **Kiểm tra khoá LP** (bảng token gang.fun): bot xem ai giữ LP token của pool PancakeSwap V2: đã đốt (không rút được), nằm trong hợp đồng (có thể là locker) hay ở ví thường (rút được bất cứ lúc nào). Pool V3 chưa đọc tự động.
-- **Tự đăng bán** (TẮT mặc định): bật trong khung Đăng bán hoặc `node src/index.js autosell --on --markup 30 --min 0.01`. Mỗi 15 phút bot đăng các NFT chưa đăng, giá = cao nhất trong (giá bán trung vị gần đây, giá mint + % lời, giá sàn). Không có giá tham khảo thì không đăng. Có Telegram thì báo mỗi lệnh đã đăng. Chạy cả trong giao diện và chế độ `vps`.
 - **Quyền token đã cấp**: bấm "Xem quyền đã cấp" để thấy mọi hợp đồng đang được phép tiêu token của ví (lấy từ `baw approvals list`), kèm hạn mức (vô hạn hay không) và mức rủi ro Binance đánh giá. Bấm **Revoke** để thu hồi (tốn ít gas, quyền hết hẳn khi giao dịch được xác nhận).
 - **Số dư ví**: tổng ≈ USDT và từng token (từ `baw wallet balance`), tự làm mới mỗi phút.
 - **Dự án kiểu "mint đầu free, sau trả phí"** (ví dụ Xuanwu Sigil): bot dò giá thật cho ví bạn bằng cách gọi thử hợp đồng (eth_call, không gửi gì), nên lần 1 gửi 0, lần 2-3 gửi đúng phí. Hàm `mint()` không có tham số số lượng thì chọn N sẽ gửi N giao dịch, mỗi cái xác nhận riêng.
@@ -91,7 +86,6 @@ Tuỳ chọn (biến môi trường, không ghi vào file):
 ```bash
 export ETHERSCAN_API_KEY="…"   # kiểm tra mã nguồn đã verify chưa (miễn phí ở etherscan.io)
 export X_BEARER_TOKEN="…"      # tự tìm từ khoá trên X (X API trả phí)
-export ELEMENT_API_KEY="…"     # lệnh mua + đăng bán trên Element (hoặc dán trên giao diện / node src/index.js element-key --key …)
 ```
 
 Trần chi tiêu nằm trong `config.json` (chép từ `config.example.json` nếu muốn đổi).
@@ -131,7 +125,8 @@ npm test   # 21 test offline (đã thêm ca giống Xuanwu Sigil): node BSC gi�
 
 x : [@HoangFUDSCAM](https://x.com/HoangFUDSCAM)
 
-### Bán trên chợ riêng của dự án
+### Bán trên chợ của web dự án
+- Ví Agentic: lỗi tạm của Binance (mạng, 429) không làm bot báo "chưa đăng nhập" hay "Developer Mode tắt" nữa; bot giữ trạng thái tốt gần nhất (tối đa 15 phút) và chỉ coi là đăng xuất khi Binance báo hết phiên thật. Giao diện hiện giờ Binance tự đăng xuất ví.
 - Bot tìm chợ của bộ NFT từ giao dịch gần đây, chỉ cấp quyền khi chợ kiểm chứng được (cùng chủ với hợp đồng NFT / web dự án ghi địa chỉ chợ / ≥ 5 người mua thật).
 - Luôn dùng `approve(chợ, tokenId)` cho **đúng 1 NFT**, không `setApprovalForAll` (chợ BN World chỉ hiện và bán được NFT có quyền này).
 - Lệnh rao bán đọc thẳng từ sự kiện của chợ trên chain; thiếu quyền thì có nút "Cấp quyền cho NFT này".

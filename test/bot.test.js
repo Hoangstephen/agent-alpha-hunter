@@ -182,7 +182,7 @@ test('MultiRpc: RPC lỗi mạng thì tự chuyển, lỗi revert thì không', 
   assert.equal(isRpcError({ message: 'limit exceeded' }), true);
 });
 
-import { salePriceBNB, toBNB } from '../src/sell.js';
+import { salePriceBNB } from '../src/sell.js';
 test('salePriceBNB: BNB trực tiếp, WBNB/USDT trả cho người bán, chia theo số NFT', () => {
   const seller = '0x0000000000000000000000000000000000002001';
   assert.equal(salePriceBNB({ txValueWei: parseEther('0.2'), seller, nftCount: 2 }), 0.1);
@@ -190,8 +190,6 @@ test('salePriceBNB: BNB trực tiếp, WBNB/USDT trả cho người bán, chia t
   assert.equal(salePriceBNB({ txValueWei: 0n, seller, nftCount: 1, receiptLogs: [log('0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', parseEther('0.05'))] }), 0.05);
   assert.equal(salePriceBNB({ txValueWei: 0n, seller, nftCount: 1, bnbUsdt: 600, receiptLogs: [log('0x55d398326f99059fF775485246999027B3197955', parseEther('30'))] }), 0.05);
   assert.equal(salePriceBNB({ txValueWei: 0n, seller, nftCount: 1, receiptLogs: [log('0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c', parseEther('1'), B)] }), null); // trả cho người khác
-  assert.equal(toBNB('0.5'), 0.5);
-  assert.equal(toBNB('500000000000000000'), 0.5);
 });
 
 import { mintPaidBNB } from '../src/sell.js';

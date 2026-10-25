@@ -71,18 +71,38 @@ export function install(onLine = () => {}) {
   });
 }
 
+// Lỗi phiên thật (đã đăng xuất / hết phiên) khác với lỗi thoáng qua (mạng, Binance trả 429/5xx).
+// Chỉ lỗi phiên thật mới coi là "chưa đăng nhập"; lỗi thoáng qua thì giữ trạng thái cũ, không văng ra.
+const AUTH_CODES = new Set([10003000, 10003001, 10003002, 10003003]);
+export const isAuthError = (err = {}) => AUTH_CODES.has(Number(err.code)) || /NOT_LOGGED_IN|SESSION_EXPIRED|SESSION_NOT_FOUND|UNAUTHORIZED/i.test(String(err.name ?? ''));
+function must(res, what) {
+  if (res?.success !== false) return res;
+  const e = res.error ?? {};
+  throw Object.assign(new Error(`${what}: ${e.message ?? 'baw báo lỗi'}`), { auth: isAuthError(e), bawCode: e.code });
+}
+
+// Thử lại 1 lần sau 0,8 giây khi lỗi thoáng qua.
+function retry(fn) {
+  try { return fn(); } catch (e) {
+    if (e.code === 'BAW_MISSING' || e.auth) throw e;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 800);
+    return fn();
+  }
+}
+
 export function walletStatus() {
-  return baw(['wallet', 'status']).data?.status;
+  return retry(() => must(baw(['wallet', 'status']), 'Không đọc được trạng thái ví').data?.status);
 }
 
 export function bscAddress(chainId = '56') {
-  const res = baw(['wallet', 'address']);
+  const res = retry(() => must(baw(['wallet', 'address']), 'Không đọc được địa chỉ ví'));
   const row = res.data?.addresses?.find((a) => String(a.binanceChainId) === String(chainId));
   return row?.address ?? null;
 }
 
+// true / false, hoặc null khi chưa đọc được (lỗi thoáng qua): null thì KHÔNG chặn, Binance preview tự báo nếu tắt thật.
 export function devModeEnabled() {
-  return Boolean(baw(['wallet', 'settings']).data?.devMode?.enabled);
+  try { return devModeInfo().enabled; } catch { return null; }
 }
 
 // baw in giờ dạng "2026-10-25 17:30:00 (+07:00)": đổi sang ISO để trình duyệt hiểu.
@@ -97,9 +117,14 @@ export function toIso(v) {
 
 // Developer Mode của Binance có hạn (tự tắt khi hết giờ), hạn mức mỗi ngày và có thể bị tắt khi số dư vượt mức.
 export function devModeInfo() {
-  const d = baw(['wallet', 'settings']).data ?? {};
-  const m = d.devMode ?? {};
-  return { enabled: Boolean(m.enabled), expiresAt: toIso(m.expiresAt), dailyLimit: m.dailyLimit ?? null, used: d.developerModeQuotaUsed ?? null, balanceExceeded: Boolean(m.balanceExceeded) };
+  const d = retry(() => must(baw(['wallet', 'settings']), 'Không đọc được cài đặt ví')).data ?? {};
+  const m = d.devMode;
+  return {
+    enabled: m == null ? null : m.enabled === true || /^(true|on|enabled|1)$/i.test(String(m.enabled)),
+    expiresAt: toIso(m?.expiresAt), dailyLimit: m?.dailyLimit ?? null, used: d.developerModeQuotaUsed ?? null, balanceExceeded: Boolean(m?.balanceExceeded),
+    // Binance tự đăng xuất phiên ví: hết hạn phiên, hoặc lâu không dùng (inactive sign-out).
+    sessionExpireAt: toIso(d.sessionExpireTime), inactiveSignOutAt: toIso(d.inactiveSignOutTime), signInMaxAt: toIso(d.signInMaxTime),
+  };
 }
 
 // Bản CLI khác nhau có/không có tuỳ chọn --binanceChainId: thử có trước, báo "unknown option" thì chạy lại không có.
