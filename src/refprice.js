@@ -73,7 +73,7 @@ export function webPrices(html = '', { max = 6 } = {}) {
 export async function refPrices(provider, nft, { markets = [], page, wallet, fetchFn = fetch, deadlineMs = 25_000 } = {}) {
   const ref = { asks: [], web: [] };
   await Promise.all([
-    ...markets.filter((m) => m.isContract && m.name !== 'Element').slice(0, 2).map(async (m) => {
+    ...markets.filter((m) => m.isContract).slice(0, 2).map(async (m) => {
       const a = await marketAsks(provider, m.address, nft, { exclude: wallet, deadlineMs }).catch(() => null);
       if (a?.count) ref.asks.push({ market: m.address, site: m.site ?? null, ...a });
     }),

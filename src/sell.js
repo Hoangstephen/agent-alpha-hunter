@@ -1,7 +1,6 @@
 // Tìm giá bán cao nhất cho NFT bạn đang giữ.
-// - Lệnh mua (offer) trên sàn Element: bán được ngay ở giá này (cần ELEMENT_API_KEY).
 // - Giá bán gần đây trên chain: tham khảo, đọc từ giao dịch có chuyển NFT kèm trả BNB/WBNB/USDT.
-// Đăng bán thật nằm ở list.js (ký lệnh Element bằng ví Agentic) và autosell.js (tự đăng theo quy tắc).
+// Đăng bán thật: qua chợ riêng của dự án (markets.js).
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { getAddress, formatEther, Interface, zeroPadValue } from 'ethers';
@@ -233,29 +232,6 @@ export async function recentSales(provider, contract, { blocks = 6000, chunk = 2
   };
 }
 
-// Element trả giá dạng số thập phân hoặc wei tuỳ API: đổi về BNB.
-export const toBNB = (v) => {
-  const n = Number(v);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  return n > 1e9 ? n / 1e18 : n;
-};
-
-export async function elementOffers(cfg, wallet, fetchFn = fetch) {
-  if (!cfg.elementKey) return { enabled: false, offers: new Map() };
-  const url = `https://api.element.market/openapi/v1/account/offerReceived?chain=bsc&wallet_address=${wallet}&limit=50`;
-  const j = await (await fetchFn(url, { headers: { 'X-Api-Key': cfg.elementKey, accept: 'application/json' }, signal: AbortSignal.timeout(8000) })).json();
-  const offers = new Map();
-  for (const it of j.data?.assetList ?? []) {
-    const bid = it.orderData?.bestBid;
-    const a = it.asset ?? {};
-    const price = toBNB(bid?.price);
-    const contract = a.contractAddress ?? a.contract ?? a.collection?.contractAddress;
-    if (!price || !contract) continue;
-    offers.set(`${contract.toLowerCase()}:${a.tokenId}`, { price, priceUSD: bid.priceUSD, maker: bid.maker });
-  }
-  return { enabled: true, offers };
-}
-
 const hostOf = (u) => { try { return new URL(u).hostname; } catch { return null; } };
 
 export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, log, cachePath, mintTxs = [], sellCachePath = 'data/sell-cache.json' } = {}) {
@@ -266,8 +242,6 @@ export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, lo
   for (const [c, ids] of fromTxs) received.set(c, new Set([...(received.get(c) ?? []), ...ids]));
   // Agent ID (.ai) là NFT soulbound: không chuyển/bán được, bỏ khỏi danh sách bán.
   const holdings = (await holdingsOf(provider, wallet, contracts, { received })).filter((h) => h.contract.toLowerCase() !== ADDR.AGENT_ID_REGISTRY.toLowerCase());
-  let element = { enabled: false, offers: new Map() };
-  try { element = await elementOffers(cfg, wallet); } catch (e) { element.error = e.message; }
 
   // Kết quả tốt gần nhất mỗi bộ NFT (giá bán + chợ), dùng khi RPC lỗi lượt này.
   let sellCache = {};
@@ -296,17 +270,15 @@ export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, lo
     const newMarkets = !h.marketsCached && h.markets?.length;
     if (newSales || newMarkets) sellCache[h.contract.toLowerCase()] = { at: Date.now(), sales: newSales ? h.sales : prev?.sales, markets: newMarkets ? h.markets : prev?.markets };
     h.items = (h.tokenIds.length ? h.tokenIds : [null]).map((id) => {
-      const offer = id != null ? element.offers.get(`${h.contract.toLowerCase()}:${id}`) : null;
       const options = [];
-      if (offer) options.push({ venue: 'Element (lệnh mua, bán ngay được)', priceBNB: offer.price, instant: true, url: `https://element.market/assets/bsc/${h.contract}/${id}` });
       if (h.sales.maxBNB) options.push({ venue: `Giá bán cao nhất gần đây (${h.sales.count} giao dịch)`, priceBNB: h.sales.maxBNB, instant: false });
       if (h.sales.medianBNB) options.push({ venue: 'Giá bán trung vị gần đây', priceBNB: h.sales.medianBNB, instant: false });
       const ask = h.ref?.asks?.[0];
       if (ask) options.push({ venue: `Giá rao rẻ nhất trên chợ ${hostOf(ask.site) ?? ask.market.slice(0, 8) + '…'} (${ask.count} NFT đang rao)`, priceBNB: ask.floorBNB, instant: false, url: ask.site ?? undefined });
       options.sort((a, b) => b.priceBNB - a.priceBNB);
-      return { tokenId: id, best: options[0] ?? null, options, elementUrl: id != null ? `https://element.market/assets/bsc/${h.contract}/${id}` : null };
+      return { tokenId: id, best: options[0] ?? null, options };
     });
   });
   try { mkdirSync(dirname(sellCachePath), { recursive: true }); writeFileSync(sellCachePath, JSON.stringify(sellCache, (_, v) => (typeof v === 'bigint' ? v.toString() : v))); } catch {}
-  return { wallet, elementEnabled: element.enabled, elementError: element.error, holdings };
+  return { wallet, holdings };
 }

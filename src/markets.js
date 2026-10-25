@@ -1,4 +1,4 @@
-// Chợ mua bán riêng của 1 bộ NFT (vd. agentpunk.fun cho Agent Nakamigos), không cần Element.
+// Chợ mua bán riêng của 1 bộ NFT (vd. agentpunk.fun cho Agent Nakamigos).
 // 1) Tìm chợ: các giao dịch chuyển NFT gần đây đi qua hợp đồng nào (không phải chính hợp đồng NFT) thì đó là chợ.
 // 2) Tin chợ: CHỈ khi chứng minh được chợ do chính đội dự án làm: owner() của chợ = owner() của hợp đồng NFT
 //    (khác địa chỉ 0). Hợp đồng drainer cũng chuyển NFT của nhiều người y như chợ, nhưng không thể có cùng chủ
@@ -13,10 +13,10 @@ import { Interface, getAddress, ZeroAddress } from 'ethers';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { TOPIC, getLogsChunked, topicToAddress, mapLimit, tryCall } from './chain.js';
 import { verifiedSource, fetchText } from './rules.js';
-import { ELEMENT } from './list.js';
 import * as wallet from './baw.js';
 
-const KNOWN = { [ELEMENT.EX.toLowerCase()]: { name: 'Element', site: 'https://element.market' } };
+// Sàn chung (không phải chợ của dự án): bỏ qua khi tìm chợ.
+const KNOWN = { '0xb3e3dfcb2d9f3dde16d78b9e6eb3538eb32b5ae1': { name: 'Element', site: 'https://element.market' } };
 const ownI = new Interface(['function owner() view returns (address)']);
 const nftI = new Interface(['function setApprovalForAll(address,bool)', 'function isApprovedForAll(address,address) view returns (bool)', 'function approve(address,uint256)', 'function getApproved(uint256) view returns (address)']);
 export const PROVEN = { buyers: 5, sellers: 5 };
@@ -106,7 +106,7 @@ export async function findMarkets(provider, nft, { blocks = 200_000, chunk = 500
     const pg = await Promise.resolve(page).catch(() => null);
     r.trust = k ? null : await trustMarket(provider, nft, r, { site: pg?.site, html: pg?.html, fetchFn }).catch(() => null);
   });
-  const v = out.filter((r) => r.isContract);
+  const v = out.filter((r) => r.isContract && !KNOWN[r.address.toLowerCase()]); // bỏ sàn chung (Element…)
   if (v.length) cache.set(nft, { at: Date.now(), v }); // không nhớ kết quả rỗng (có thể do RPC lỗi lần này)
   return v;
 }

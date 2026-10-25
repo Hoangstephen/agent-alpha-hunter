@@ -29,7 +29,7 @@
   <li><b>铸造前显示完整信息：</b>合约价格、其他人支付的价格、当前售价、预估利润、实时已铸造数量、每钱包上限、安全分 0–100。</li>
   <li><b>每个 NFT 的项目规则</b>（来自合约和项目网站），以及项目的 X 链接。</li>
   <li><b>一键铸造：</b>选择数量，点击 Mint，确认。还有"等待开放铸造"按钮，开放时提醒你确认。</li>
-  <li><b>出售与清理：</b>为持有的 NFT 查找最高售价，直接从 Agentic 钱包在 Element 挂单（可自动挂单），检查 gang.fun 代币的流动性（LP）是否已锁定或销毁，查看并撤销代币授权。</li>
+  <li><b>出售与清理：</b>为持有的 NFT 查找最高售价，在项目自己的市场挂单，检查 gang.fun 代币的流动性（LP）是否已锁定或销毁，查看并撤销代币授权。</li>
   <li><b>🔥 Hot</b>（0–100）表示项目热度（铸造钱包数、Agent ID 比例、X 提及），不是安全分。<b>💎 宝藏</b>表示仅限 Agent ID、铸造较慢、知道的人还不多的项目。</li>
   <li><b>仿冒提醒：</b>两个合约同名时，铸造较少的那个会显示红色"可能是仿冒"警告。</li>
   <li><b>自动学习铸造方式：</b>合约使用特殊铸造函数时，机器人会复制他人成功铸造的调用（替换成你的钱包和 Agent ID）。每次铸造仍需你确认。</li>
@@ -81,17 +81,8 @@
 <p>如果合约的 <code>mint()</code> 每次只铸造 1 个 NFT：选择 3 个时，机器人会依次发送 3 笔交易，每笔单独确认。每次都会自动探测价格，因为第一次可能免费。</p>
 
 
-<h2>在 Element 挂单出售（Agentic 钱包）</h2>
-<p>Agentic 钱包无法连接 Element 网站，所以网站上没有挂单按钮。机器人代你挂单，挂单照常显示在 Element 上。</p>
-<ol>
-  <li>在 Element 申请表 <a href="https://forms.gle/78wpggURGADCjshr7" target="_blank" rel="noopener">https://forms.gle/78wpggURGADCjshr7</a>（咨询：api@element.market）免费获取 <b>Element API key</b>，粘贴到出售区的 <b>Element API key</b> 框 → 保存。</li>
-  <li>点击 <b>查找最高售价</b>。每个 NFT 都有价格框（已填建议价）和 <b>挂单</b> 按钮。</li>
-  <li>每个系列第一次：第 1/2 步授权 Element 在有人购买时转移 NFT（少量 gas）。机器人只允许授权给 Element 交易合约 <code>0xb3e3DfCb2d9f3DdE16d78B9e6EB3538Eb32B5ae1</code>。</li>
-  <li>确认框显示价格、平台费、版税和你实际到手的 BNB → <b>签名并挂单</b>（无需 gas）。</li>
-</ol>
-<p><b>自动挂单</b>（默认关闭）：勾选后设置相对铸造价的加价 %、底价和天数 → 保存。机器人每 15 分钟为未挂单的 NFT 挂单，价格取以下最高者：近期成交中位价、铸造价 + 加价、底价。没有参考价则不挂单。VPS：<code>node src/index.js element-key --key KEY</code>，然后 <code>node src/index.js autosell --on --markup 30 --min 0.01</code>。</p>
-
-<h2>在项目自己的市场出售（无需 Element）</h2>
+<h2>在项目自己的市场出售</h2>
+<p>机器人不再使用 Element：Agent NFT 项目都在自己的市场交易。</p>
 <ul>
   <li>点击 <b>查找最高售价</b>。机器人会找到该系列交易的市场（例如 BN World 的 Onchain Agents 市场）。显示 <b>✓ 项目市场</b> 表示已验证：与 NFT 合约同一所有者、项目网站列出该市场地址，或有 5 个以上真实买家。</li>
   <li><b>参考价格</b>（价格栏下方）：机器人读取项目市场上其他卖家最低的有效挂单（仅统计未过期且卖家仍持有 NFT 的挂单），以及项目 / 市场网站上写的价格（地板价、价格等）。建议价不会低于该最低挂单。网站价格可能过时，请再次核对。</li>
