@@ -70,7 +70,7 @@ export class MultiRpc {
     if (!this.custom || Date.now() - this.customDownAt < 60_000) return;
     if (this.url !== this.custom && this.urls.includes(this.custom)) {
       this.i = this.urls.indexOf(this.custom); this.p = this.factory(this.custom);
-      this.log(`[rpc] quay lại RPC riêng ${new URL(this.custom).host}`);
+      this.log(`[rpc] quay lại RPC riêng ${hostOf(this.custom)}`);
     }
     if (this.logsUrl !== this.custom && this.logUrls.includes(this.custom)) {
       this.li = this.logUrls.indexOf(this.custom); this.lp = this.factory(this.custom); this.lpUrl = this.custom;
@@ -79,40 +79,46 @@ export class MultiRpc {
 
   markDown(u, e) {
     if (u !== this.custom) return;
-    if (Date.now() - this.customDownAt > 60_000) this.log(`[rpc] RPC riêng ${new URL(u).host} lỗi (${(e?.shortMessage || e?.message || '').slice(0, 80)}), dùng tạm RPC công khai 60 giây`);
+    if (Date.now() - this.customDownAt > 60_000) this.log(`[rpc] RPC riêng ${hostOf(u)} lỗi (${errText(e)}), dùng tạm RPC công khai 60 giây${/429|limit|quota|exceed|compute unit|CU/i.test(errText(e)) ? '. Có thể đã hết hạn mức gói NodeReal: xem trang NodeReal' : ''}`);
     this.customDownAt = Date.now();
   }
 
   get url() { return this.urls[this.i]; }
   get logsUrl() { return this.lpUrl ?? this.logUrls[this.li]; }
 
-  rotate() {
+  rotate(e) {
     if (this.urls.length === 1) return;
     this.i = (this.i + 1) % this.urls.length;
     this.p = this.factory(this.urls[this.i]);
-    this.log(`[rpc] chuyển sang ${this.url}`);
+    this.log(`[rpc] chuyển sang ${hostOf(this.url)}${e ? ` (lỗi trước: ${errText(e)})` : ''}`);
   }
 
   rotateLogs() {
     if (this.logUrls.length === 1) return;
     this.li = (this.li + 1) % this.logUrls.length;
     this.lp = this.factory(this.logUrls[this.li]); this.lpUrl = this.logUrls[this.li];
-    this.log(`[rpc] lấy log qua ${this.logsUrl}`);
+    this.log(`[rpc] lấy log qua ${hostOf(this.logsUrl)}`);
   }
 
   async run(fn) {
     let last;
+    const seen = new Map();
     this.backToCustom();
     for (let n = 0; n < this.urls.length; n++) {
       const u = this.url;
+      const p = this.p;
       try {
         // RPC công khai đôi khi treo: quá 15 giây coi như lỗi mạng và đổi RPC.
-        return await withTimeout(fn(this.p), this.timeoutMs);
+        return await withTimeout(fn(p), this.timeoutMs);
       } catch (e) {
         if (!isRpcError(e) || isRangeError(e)) throw e;
         last = e;
+        // Cùng 1 lỗi ở 2 RPC khác nhau (không phải hết giờ/mạng): lỗi do lệnh gọi, đổi RPC không giúp, dừng luôn.
+        const k = errText(e);
+        if (!/timeout|ECONN|ENOTFOUND|EAI_AGAIN|fetch failed|429|503|502|socket/i.test(k) && (seen.get(k) ?? 0) >= 1) throw e;
+        seen.set(k, (seen.get(k) ?? 0) + 1);
         this.markDown(u, e);
-        this.rotate();
+        if (this.p === p) this.rotate(e); // nhiều lệnh song song cùng lỗi: chỉ đổi 1 lần
       }
     }
     throw last;
@@ -141,13 +147,13 @@ export class MultiRpc {
         if ((k >= 5 || /ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(`${e.message} ${e.code}`)) && u !== this.custom && this.logUrls.length > 1 && this.logUrls.includes(u)) {
           const at = this.logUrls.indexOf(u);
           this.logUrls = this.logUrls.filter((x) => x !== u);
-          this.log(`[rpc] bỏ ${new URL(u).host} khỏi danh sách lấy log (lỗi: ${(e.shortMessage || e.message || '').slice(0, 60)})`);
+          this.log(`[rpc] bỏ ${hostOf(u)} khỏi danh sách lấy log (lỗi: ${(e.shortMessage || e.message || '').slice(0, 60)})`);
           // RPC kế tiếp (đứng sau RPC vừa bỏ), không quay về đầu danh sách.
-          if (this.lp === p) { this.li = at % this.logUrls.length; this.lp = this.factory(this.logUrls[this.li]); this.lpUrl = this.logUrls[this.li]; this.log(`[rpc] lấy log qua ${this.logsUrl}`); }
+          if (this.lp === p) { this.li = at % this.logUrls.length; this.lp = this.factory(this.logUrls[this.li]); this.lpUrl = this.logUrls[this.li]; this.log(`[rpc] lấy log qua ${hostOf(this.logsUrl)}`); }
           else this.li = Math.max(0, this.logUrls.indexOf(this.lpUrl));
           continue;
         }
-        if (this.lp === p) this.rotateLogs();
+        if (this.lp === p) { this.log(`[rpc] lấy log lỗi ở ${hostOf(u)}: ${errText(e)}`); this.rotateLogs(); }
       }
     }
     throw last;
@@ -184,7 +190,7 @@ export class MultiRpc {
       this.i = 1 % this.urls.length;
       this.p = this.factory(this.urls[this.i]);
       this.customDownAt = Date.now();
-      this.log(`[rpc] ⚠ RPC riêng ${new URL(this.custom).host} không trả lời lúc khởi động. Dùng tạm RPC công khai, 60 giây sau thử lại.`);
+      this.log(`[rpc] ⚠ RPC riêng ${hostOf(this.custom)} không trả lời lúc khởi động. Dùng tạm RPC công khai, 60 giây sau thử lại.`);
     } else {
       this.i = 0;
       this.p = read[0].p;
@@ -200,9 +206,9 @@ export class MultiRpc {
     } else {
       this.log('[rpc] cảnh báo: không RPC công khai nào trả log lúc này, việc tìm NFT có thể thiếu. Nên đặt BSC_RPC_URL riêng.');
     }
-    if (this.custom) this.log(`[rpc] RPC riêng: ${new URL(this.custom).host} ${customOk ? '✓ đang dùng (đọc hợp đồng + lấy log)' : '✗ chưa trả lời'}`);
+    if (this.custom) this.log(`[rpc] RPC riêng: ${hostOf(this.custom)} ${customOk ? '✓ đang dùng (đọc hợp đồng + lấy log)' : '✗ chưa trả lời'}`);
     else this.log('[rpc] chưa có RPC riêng (data/rpc.json trống): đang dùng RPC công khai. Dán link NodeReal ở mục ⚙ RPC riêng.');
-    this.log(`[rpc] đọc hợp đồng: ${this.url} · lấy log: ${this.logsUrl} (${logs.length} RPC lấy log được)`);
+    this.log(`[rpc] đọc hợp đồng: ${hostOf(this.url)} · lấy log: ${hostOf(this.logsUrl)} (${logs.length} RPC lấy log được)`);
     return this;
   }
 
@@ -215,6 +221,10 @@ export class MultiRpc {
   getTransaction(h) { return this.run((p) => p.getTransaction(h)); }
   getTransactionReceipt(h) { return this.run((p) => p.getTransactionReceipt(h)); }
 }
+
+// Chỉ hiện tên miền RPC, không hiện phần đường dẫn (có API key).
+const hostOf = (u) => { try { return new URL(u).host; } catch { return String(u); } };
+const errText = (e) => String(e?.shortMessage || e?.message || e || '').replace(/https?:\/\/\S+/g, '').slice(0, 90);
 
 function withTimeout(promise, ms) {
   return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
