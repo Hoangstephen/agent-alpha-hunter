@@ -358,3 +358,23 @@ test('siteMarket: web có mục Market / ghi địa chỉ chợ thì có chợ; 
   const oa = await siteMarket(p, '0xC4605C6A7765138784B3ca6F9a88e1c249a0d21f', page('<div id="root"></div>'));
   assert.deepEqual([oa.ok, oa.via, oa.contract], [true, 'known', MKT]);
 });
+
+test('projectPage: tìm web từ metadata của token đang giữ (token 1 chưa có) và từ tên miền trong mô tả', async () => {
+  const { projectPage, siteFromText } = await import('../src/rules.js');
+  const { Interface: I, AbiCoder: C } = await import('ethers');
+  assert.equal(siteFromText('Proof of Agent, minted on ptah.trade. Follow x.com/Ptahtrade'), 'https://ptah.trade/');
+  assert.equal(siteFromText('see https://x.com/abc and ipfs.io'), null);
+  const mi = new I(['function tokenURI(uint256) view returns (string)']);
+  const P = '0xD87A000000000000000000000000000000002213';
+  const provider = {
+    async call({ data }) {
+      if (data.slice(0, 10) !== mi.getFunction('tokenURI').selector) throw new Error('revert');
+      const id = mi.decodeFunctionData('tokenURI', data)[0];
+      if (id !== 1328n) throw new Error('revert'); // token 1 / 0 chưa mint
+      return C.defaultAbiCoder().encode(['string'], ['https://api.ptah.trade/meta/1328']);
+    },
+  };
+  const fetchFn = async (u) => ({ ok: true, text: async () => (String(u).includes('/meta/') ? '{"name":"Proof #1328"}' : '<a href="/market">Explore the NFT market</a>') });
+  const pg = await projectPage(provider, P, fetchFn, { ids: ['1328'] });
+  assert.equal(pg.site, 'https://ptah.trade/');
+});

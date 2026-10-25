@@ -242,7 +242,7 @@ export async function translateTo(texts, tl, fetchFn = fetch) {
   });
 }
 
-const metaI = new Interface(['function contractURI() view returns (string)', 'function tokenURI(uint256) view returns (string)', 'function uri(uint256) view returns (string)']);
+const metaI = new Interface(['function contractURI() view returns (string)', 'function tokenURI(uint256) view returns (string)', 'function uri(uint256) view returns (string)', 'function tokenByIndex(uint256) view returns (uint256)']);
 
 // Hàm thuần: link X (Twitter) của dự án trong metadata hoặc trang web. Bỏ link chia sẻ/tìm kiếm/bài viết.
 export function extractX(html = '', meta = {}) {
@@ -258,13 +258,17 @@ export function extractX(html = '', meta = {}) {
 
 // Metadata + trang web dự án, dùng chung cho luật và link X. Lưu đệm 30 phút.
 const pcache = new Map();
-export async function projectPage(provider, address, fetchFn = fetch) {
+export async function projectPage(provider, address, fetchFn = fetch, { ids = [] } = {}) {
   const key = address.toLowerCase();
-  if (pcache.has(key) && Date.now() - pcache.get(key).at < 30 * 60_000) return pcache.get(key).v;
+  const hit = pcache.get(key);
+  // Có web: nhớ 30 phút. Chưa tìm ra web: chỉ nhớ 5 phút, hoặc thử lại ngay khi có thêm số token để đọc metadata.
+  if (hit && Date.now() - hit.at < (hit.v.site ? 30 : 5) * 60_000 && (hit.v.site || !ids.length || hit.ids)) return hit.v;
   const v = { site: KNOWN[key]?.site ?? null, description: null, html: '', x: KNOWN[key]?.x ?? null };
-  // Metadata: contractURI() trước, không có thì tokenURI của token đầu tiên.
+  // Metadata: contractURI() trước, rồi tokenURI của token có thật (token bạn giữ, token đầu tiên theo tokenByIndex), rồi token 1 / 0.
   let meta = null;
-  for (const [fn, args] of [['contractURI', []], ['tokenURI', [1n]], ['tokenURI', [0n]], ['uri', [1n]]]) {
+  const first = await tryCall(provider, address, metaI, 'tokenByIndex', [0n]);
+  const tries = [['contractURI', []], ...[...ids.slice(0, 2).map((i) => BigInt(i)), ...(first != null ? [first] : []), 1n, 0n].map((i) => ['tokenURI', [i]]), ['uri', [1n]]];
+  for (const [fn, args] of tries) {
     const uri = await tryCall(provider, address, metaI, fn, args);
     if (!uri) continue;
     try { meta = await readJsonUri(String(uri).replace('{id}', '1'.padStart(64, '0')), fetchFn); } catch {}
@@ -274,8 +278,10 @@ export async function projectPage(provider, address, fetchFn = fetch) {
     if (meta) break;
   }
   if (meta) {
-    v.site ??= siteUrl(meta.external_link ?? meta.external_url ?? meta.website);
+    v.site ??= siteUrl(meta.external_link ?? meta.external_url ?? meta.website ?? meta.properties?.website ?? meta.properties?.external_url);
     if (meta.description) v.description = String(meta.description).slice(0, 600);
+    // Mô tả có ghi tên miền dự án (vd. "… on ptah.trade"): lấy làm web (bỏ mạng xã hội / sàn chung / chỗ lưu file).
+    v.site ??= siteFromText(v.description);
   }
   // Mã nguồn đã xác minh: chú thích của dự án + link website / X trong mã.
   const src = await verifiedSource(address, fetchFn).catch(() => ({ notes: [] }));
@@ -287,8 +293,18 @@ export async function projectPage(provider, address, fetchFn = fetch) {
   v.description ??= metaDescription(v.html);
   v.x ??= extractX(v.html, meta ?? {}) ?? extractX(v.description ?? '') ?? src.x ?? null;
   v.perWallet = rememberSite(address, `${strip(v.html.replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, ''))} ${v.description ?? ''}`);
-  pcache.set(key, { at: Date.now(), v });
+  pcache.set(key, { at: Date.now(), v, ids: ids.length > 0 });
   return v;
+}
+
+const NOT_SITE = /(^|\.)(x\.com|twitter\.com|t\.me|telegram\.|discord|github\.com|medium\.com|youtube|bscscan|etherscan|element\.market|opensea|binance\.com|pancakeswap)/i;
+export function siteFromText(text = '') {
+  for (const m of String(text).matchAll(/(?:https?:\/\/)?((?:[a-z0-9-]+\.)+(?:com|io|xyz|fun|trade|art|ai|app|me|org|net|gg|world|club|so|co|finance|market|bot|tech|dev|site|online|pro|vip|cc))(?=[\/\s"'),.;:!?]|$)/gi)) {
+    if (NOT_SITE.test(m[1]) || STORAGE.test(m[1])) continue;
+    const u = siteUrl(`https://${m[1].toLowerCase()}/`);
+    if (u) return u;
+  }
+  return null;
 }
 
 // Luật đầy đủ (chậm hơn, cần mạng ngoài): trang dự án → mục luật → dịch.

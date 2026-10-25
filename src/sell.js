@@ -253,7 +253,7 @@ export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, lo
     // Log chuyển NFT ~1,5 ngày gần nhất (BSC ~0,75 giây/block): đọc 1 lần, dùng chung cho giá bán gần đây và tìm chợ.
     const head = await provider.getBlockNumber();
     const logs = await getLogsChunked(provider, { address: h.contract, topics: [TOPIC.TRANSFER] }, head - 180_000, head, 5000, { concurrency: 6, deadlineMs: 30_000 }).catch(() => null);
-    const page = Promise.race([projectPage(provider, h.contract).catch(() => null), new Promise((r) => setTimeout(() => r(null), 10_000))]);
+    const page = Promise.race([projectPage(provider, h.contract, fetch, { ids: h.tokenIds }).catch(() => null), new Promise((r) => setTimeout(() => r(null), 10_000))]);
     const [pg, found] = await Promise.all([
       page,
       logs ? Promise.race([findMarkets(provider, h.contract, { logs, page }).catch(() => []), new Promise((r) => setTimeout(() => r([]), 40_000))]) : [],

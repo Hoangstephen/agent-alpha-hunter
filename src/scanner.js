@@ -126,7 +126,7 @@ export async function scanAll(provider, cfg, log = console.log, { walletAddr, bn
   // Mỗi NFT hiện lên giao diện ngay khi kiểm tra xong.
   await mapLimit(top, 4, async (n, i) => {
     // Link X của dự án (từ metadata / trang web), chạy song song, tối đa 8 giây.
-    const pg = await Promise.race([projectPage(provider, n.address).catch(() => null), new Promise((r) => setTimeout(() => r(null), 10_000))]);
+    const pg = await Promise.race([projectPage(provider, n.address, fetch, { ids: n.lastId ? [n.lastId] : [] }).catch(() => null), new Promise((r) => setTimeout(() => r(null), 10_000))]);
     n.site = pg?.site ?? null;
     n.market = pg?.site ? await Promise.race([siteMarket(provider, n.address, pg).catch(() => null), new Promise((r) => setTimeout(() => r(null), 15_000))]) : null;
     if (!n.site || !n.market?.ok) {
