@@ -362,3 +362,13 @@ test('Chợ chỉ bán 1 bộ NFT: học đặt giá không cần địa chỉ N
   assert.equal(g.guessed, 'list(uint256,uint256)');
   assert.equal(g.data, '0x' + sel + W(5888) + W(pe('0.002')));
 });
+
+test('marketApproved perToken: quyền cả bộ không đủ, cần approve(chợ, số token)', async () => {
+  const { marketApproved } = await import('../src/markets.js');
+  const I = new Interface(['function isApprovedForAll(address,address) view returns (bool)', 'function getApproved(uint256) view returns (address)']);
+  const MK = '0x7777777777777777777777777777777777777777';
+  const p = (approvedTo) => ({ call: async ({ data }) => (I.parseTransaction({ data }).name === 'isApprovedForAll' ? coder.encode(['bool'], [true]) : coder.encode(['address'], [approvedTo])) });
+  assert.equal(await marketApproved(p(ZeroAddress), NFT, MAKER, MK, 1), true);
+  assert.equal(await marketApproved(p(ZeroAddress), NFT, MAKER, MK, 1, { perToken: true }), false);
+  assert.equal(await marketApproved(p(MK), NFT, MAKER, MK, 1, { perToken: true }), true);
+});

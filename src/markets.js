@@ -246,9 +246,11 @@ export const approveMarketData = (market) => nftI.encodeFunctionData('setApprova
 // Quyền cho đúng 1 NFT (chợ chưa chứng minh được cùng chủ với dự án).
 export const approveTokenData = (market, tokenId) => nftI.encodeFunctionData('approve', [getAddress(market), BigInt(tokenId)]);
 export const revokeMarketData = (market) => nftI.encodeFunctionData('setApprovalForAll', [getAddress(market), false]);
-export async function marketApproved(provider, nft, owner, market, tokenId) {
+// perToken: chỉ tính quyền riêng cho đúng NFT (getApproved). Nhiều chợ (vd. BN World / Onchain Agents) chỉ hiện và
+// chỉ bán được NFT có approve(chợ, số token); quyền cả bộ (setApprovalForAll) không đủ.
+export async function marketApproved(provider, nft, owner, market, tokenId, { perToken = false } = {}) {
   const read = async (fn, args) => nftI.decodeFunctionResult(fn, await provider.call({ to: nft, data: nftI.encodeFunctionData(fn, args) }))[0];
-  try { if (await read('isApprovedForAll', [owner, market])) return true; } catch {}
+  if (!perToken) { try { if (await read('isApprovedForAll', [owner, market])) return true; } catch {} }
   if (tokenId == null) return false;
   try { return (await read('getApproved', [BigInt(tokenId)])).toLowerCase() === market.toLowerCase(); } catch { return false; }
 }

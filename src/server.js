@@ -165,6 +165,7 @@ const api = {
       for (const it of h.items ?? []) {
         const l = listed[`${h.contract.toLowerCase()}:${it.tokenId}`];
         if (l && !l.failed && Date.parse(l.expiresAt) > Date.now()) it.listed = l;
+        if (it.listed?.market && !manual) it.listed.needsApprove = !(await marketApproved(state.provider, h.contract, addr, it.listed.market, it.tokenId, { perToken: true }));
         it.suggestBNB = suggest;
       }
     }
@@ -199,14 +200,15 @@ const api = {
     if (!m.trust) return { ok: false, error: `Chợ này chưa đủ bằng chứng là chợ thật: khác chủ với hợp đồng NFT, web dự án không nhắc tới, và mới có ${m.buyers ?? 0} người mua trả BNB qua chợ (cần ≥ 5). Bot không cấp quyền. Bán trên web của chợ nếu bạn tin nó.`, site: m.site };
     const id = randomUUID();
     const base = { market: m.address, site: m.site, owner: m.trust.owner, trust: m.trust, contract, tokenId: String(tokenId) };
-    if (!(await marketApproved(state.provider, contract, w.address, m.address, tokenId))) {
-      // Cùng chủ với dự án: quyền cả bộ (bán nhiều NFT không phải cấp lại). Cách tin khác: chỉ quyền cho đúng NFT này.
-      const scope = m.trust.scope === 'all' ? 'all' : 'token';
-      const pv = await previewMarketCall(cfg, w.address, contract, scope === 'all' ? approveMarketData(m.address) : approveTokenData(m.address, tokenId), { provider: state.provider, what: 'bước cấp quyền', log });
+    // Luôn cấp quyền cho ĐÚNG NFT đang bán: approve(chợ, số token). Chợ chuẩn nào cũng nhận, an toàn hơn quyền cả bộ,
+    // và có chợ (BN World) chỉ hiện/bán được NFT có quyền này. Quyền tự mất khi NFT được bán hoặc chuyển đi.
+    if (!(await marketApproved(state.provider, contract, w.address, m.address, tokenId, { perToken: true }))) {
+      const pv = await previewMarketCall(cfg, w.address, contract, approveTokenData(m.address, tokenId), { provider: state.provider, what: 'bước cấp quyền', log });
       if (!pv.ok) return pv;
-      state.pending.set(id, { kind: 'mk-approve', requestId: pv.requestId, contract, tokenId: String(tokenId), market: m.address, at: Date.now() });
-      return { ok: true, step: 'approve', scope, id, ...base, risks: pv.risks, needsAppApproval: pv.requireConfirmation };
+      state.pending.set(id, { kind: 'mk-approve', requestId: pv.requestId, contract, tokenId: String(tokenId), market: m.address, approveOnly: mode === 'approve', at: Date.now() });
+      return { ok: true, step: 'approve', scope: 'token', id, ...base, risks: pv.risks, needsAppApproval: pv.requireConfirmation };
     }
+    if (mode === 'approve') return { ok: true, step: 'done', message: 'NFT này đã có quyền cho chợ.' };
     const learnedM = await learnMarket(state.provider, m.address, contract).catch(() => ({ sellSamples: [], listSamples: [] }));
     let call;
     if (mode === 'list') {
@@ -246,7 +248,7 @@ const api = {
     if (!r.txHash) return { ok: true, next: 'retry', message: 'Duyệt giao dịch trong app Binance, rồi bấm lại.' };
     log(`[bán] ${p.kind === 'mk-revoke' ? `thu hồi quyền chợ ${p.market} cho ${p.contract}` : p.kind === 'mk-approve' ? `cấp quyền chợ ${p.market} cho ${p.contract}` : `${p.kind === 'mk-list' ? 'đặt giá bán' : 'bán'} ${p.contract} #${p.tokenId} trên chợ ${p.market}`}: ${r.txHash}`);
     const done = await waitReceipt(state.provider, r.txHash, { timeoutMs: 60_000 });
-    if (p.kind === 'mk-approve') return done ? { ok: true, next: 'sell' } : { ok: false, error: 'Cấp quyền chưa được xác nhận trên chain, thử lại sau ít phút.' };
+    if (p.kind === 'mk-approve') return done ? (p.approveOnly ? { ok: true, txHash: r.txHash, confirmed: true, kind: 'mk-approve' } : { ok: true, next: 'sell' }) : { ok: false, error: 'Cấp quyền chưa được xác nhận trên chain, thử lại sau ít phút.' };
     if (p.kind === 'mk-revoke') return { ok: true, txHash: r.txHash, confirmed: done, kind: p.kind };
     let noMarketLog = false;
     if (p.kind === 'mk-list' && done) {
