@@ -549,8 +549,8 @@ test('RPC riêng: lỗi thì dùng tạm RPC công khai, 60 giây sau quay lại
 
 test('MultiRpc: cùng 1 lỗi ở 2 RPC (lỗi do lệnh gọi) thì dừng, không đổi qua hết mọi RPC', async () => {
   const lines = [];
-  const factory = () => ({ getBlockNumber: async () => 1, getLogs: async () => [], call: async () => { throw new Error('gas limit exceeded'); } });
+  const factory = () => ({ getBlockNumber: async () => 1, getLogs: async () => [], call: async () => { throw new Error('could not coalesce error (bad response)'); } });
   const m = new MultiRpc(['https://a', 'https://b', 'https://c', 'https://d'], { factory, log: (l) => lines.push(l) });
-  await assert.rejects(m.call({}), /gas limit/);
+  await assert.rejects(m.call({}), /coalesce/);
   assert.equal(lines.filter((l) => l.includes('chuyển sang')).length, 1, lines.join('\n'));
 });
