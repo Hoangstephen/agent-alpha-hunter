@@ -73,6 +73,24 @@ export function maxQty(info, cfg, { bnbUsdt } = {}) {
 // Điểm thấp nhất được phép khi bạn tick "đã tự kiểm tra hợp đồng". Dưới mức này luôn chặn.
 export const HARD_MIN_SCORE = 40;
 
+// Lỗi tuỳ chỉnh (custom error) hay gặp: đổi mã 4 byte ra tên + nghĩa tiếng Việt. Mã lạ thì vẫn hiện mã để tra.
+const CUSTOM_ERRORS = {
+  'AlreadyClaimed()': 'ví này đã claim rồi', 'Claimed()': 'ví này đã claim rồi', 'AlreadyMinted()': 'ví này đã mint rồi',
+  'NotEligible()': 'ví này không có tên trong danh sách', 'NotWhitelisted()': 'ví này không có tên trong danh sách', 'InvalidProof()': 'ví này không có tên trong danh sách (sai proof)',
+  'ClaimNotStarted()': 'chưa mở claim', 'NotStarted()': 'chưa mở', 'ClaimNotActive()': 'claim đang đóng', 'ClaimClosed()': 'claim đã đóng', 'ClaimEnded()': 'claim đã kết thúc', 'Ended()': 'đã kết thúc',
+  'NoAgentId()': 'ví chưa có Agent ID', 'NotAgent()': 'ví chưa có Agent ID', 'MissingAgentId()': 'ví chưa có Agent ID', 'AgentIdRequired()': 'ví chưa có Agent ID',
+  'InsufficientBalance()': 'hợp đồng hết token để trả', 'SoldOut()': 'đã hết suất', 'MaxSupplyReached()': 'đã hết suất', 'ExceedsMaxPerWallet()': 'vượt giới hạn mỗi ví',
+  'EnforcedPause()': 'hợp đồng đang tạm dừng', 'Paused()': 'hợp đồng đang tạm dừng', 'InsufficientPayment()': 'gửi thiếu tiền', 'WrongPrice()': 'sai giá',
+};
+const ERR_SEL = Object.fromEntries(Object.entries(CUSTOM_ERRORS).map(([sig, vi]) => [id(sig).slice(0, 10), `${sig.replace('()', '')}: ${vi}`]));
+export function explainRevert(e) {
+  const data = String(e?.data ?? e?.info?.error?.data ?? e?.error?.data ?? '').toLowerCase();
+  const base = e?.shortMessage || e?.message || String(e);
+  if (!/^0x[0-9a-f]{8}/.test(data)) return base;
+  const sel = data.slice(0, 10);
+  return ERR_SEL[sel] ? `hợp đồng từ chối (${ERR_SEL[sel]})` : `${base}, mã lỗi ${sel} (tra trên https://openchain.xyz/signatures?query=${sel})`;
+}
+
 export async function prepareMint(provider, cfg, address, { qty = 1, fn, args, valueBnb, walletAddr, info, bnbUsdt, acceptRisk = false } = {}) {
   const target = getAddress(address);
   info ??= await inspectContract(provider, target, cfg, walletAddr);
@@ -181,7 +199,7 @@ export async function prepareMint(provider, cfg, address, { qty = 1, fn, args, v
   try {
     out.gas = await provider.estimateGas({ from: simFrom, to: target, data: out.data, value: out.valueWei });
   } catch (e) {
-    out.simError = e.shortMessage || e.message;
+    out.simError = explainRevert(e);
     // Mô phỏng từ address(0) có thể revert vì thiếu Agent ID; chỉ chặn khi đã có ví thật.
     if (walletAddr) out.errs.push(`Mô phỏng revert: ${out.simError}`);
     else out.notes.push(`Mô phỏng từ ví trống revert (${out.simError}), sẽ kiểm tra lại bằng ví của bạn.`);

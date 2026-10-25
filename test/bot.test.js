@@ -577,3 +577,11 @@ test('MultiRpc: RPC lấy log duy nhất lỗi liên tục ("missing response") 
   assert.deepEqual(await m.getLogs({}), [{ u: 'https://two' }]);
   assert.equal(lines.filter((l) => l.includes('lấy log lỗi ở one')).length, 1);
 });
+
+test('explainRevert: đổi mã lỗi tuỳ chỉnh hay gặp ra tiếng Việt, mã lạ thì hiện mã để tra', async () => {
+  const { explainRevert } = await import('../src/mint.js');
+  const { id: h } = await import('ethers');
+  assert.match(explainRevert({ shortMessage: 'execution reverted (unknown custom error)', data: h('AlreadyClaimed()').slice(0, 10) }), /đã claim rồi/);
+  assert.match(explainRevert({ shortMessage: 'execution reverted (unknown custom error)', data: '0xdeadbeef' }), /mã lỗi 0xdeadbeef/);
+  assert.equal(explainRevert({ shortMessage: 'execution reverted: paused' }), 'execution reverted: paused');
+});
