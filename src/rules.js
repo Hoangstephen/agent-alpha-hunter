@@ -90,30 +90,10 @@ function safeUrl(u) {
 export async function fetchText(u, fetchFn, max = 600_000) {
   const url = safeUrl(u);
   if (!url) return null;
-  if (process.env.FAKE_FETCH) return JSON.parse(process.env.FAKE_FETCH)[url] ?? null; // chỉ dùng trong test (web giả)
   const r = await fetchFn(url, { redirect: 'follow', signal: AbortSignal.timeout(7000), headers: { accept: 'text/html,application/json' } });
   if (!r.ok) return null;
   const t = await r.text();
   return t.slice(0, max);
-}
-
-// HTML trang + tối đa 8 file JS cùng tên miền (web dạng app chỉ có menu, link, địa chỉ hợp đồng trong file JS). Lưu đệm 30 phút.
-const stcache = new Map();
-export async function siteTexts(site, html, fetchFn = fetch) {
-  if (!site) return [];
-  const key = `${site}|${html == null ? '' : String(html).length}`;
-  const hit = stcache.get(key);
-  if (hit && Date.now() - hit.at < 30 * 60_000) return hit.v;
-  let base;
-  try { base = new URL(site); } catch { return []; }
-  html = html ?? (await fetchText(site, fetchFn).catch(() => '')) ?? '';
-  const root = (h) => h.split('.').slice(-2).join('.');
-  const srcs = [...String(html).matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) => { try { return new URL(m[1], base); } catch { return null; } })
-    .filter((u) => u && u.protocol === 'https:' && root(u.hostname) === root(base.hostname)).slice(0, 8);
-  const js = await Promise.all(srcs.map((u) => fetchText(u.href, fetchFn, 5_000_000).catch(() => null)));
-  const v = [String(html), ...js.filter(Boolean)];
-  stcache.set(key, { at: Date.now(), v });
-  return v;
 }
 
 async function readJsonUri(uri, fetchFn) {
@@ -242,7 +222,7 @@ export async function translateTo(texts, tl, fetchFn = fetch) {
   });
 }
 
-const metaI = new Interface(['function contractURI() view returns (string)', 'function tokenURI(uint256) view returns (string)', 'function uri(uint256) view returns (string)', 'function tokenByIndex(uint256) view returns (uint256)']);
+const metaI = new Interface(['function contractURI() view returns (string)', 'function tokenURI(uint256) view returns (string)', 'function uri(uint256) view returns (string)']);
 
 // Hàm thuần: link X (Twitter) của dự án trong metadata hoặc trang web. Bỏ link chia sẻ/tìm kiếm/bài viết.
 export function extractX(html = '', meta = {}) {
@@ -258,17 +238,13 @@ export function extractX(html = '', meta = {}) {
 
 // Metadata + trang web dự án, dùng chung cho luật và link X. Lưu đệm 30 phút.
 const pcache = new Map();
-export async function projectPage(provider, address, fetchFn = fetch, { ids = [] } = {}) {
+export async function projectPage(provider, address, fetchFn = fetch) {
   const key = address.toLowerCase();
-  const hit = pcache.get(key);
-  // Có web: nhớ 30 phút. Chưa tìm ra web: chỉ nhớ 5 phút, hoặc thử lại ngay khi có thêm số token để đọc metadata.
-  if (hit && Date.now() - hit.at < (hit.v.site ? 30 : 5) * 60_000 && (hit.v.site || !ids.length || hit.ids)) return hit.v;
+  if (pcache.has(key) && Date.now() - pcache.get(key).at < 30 * 60_000) return pcache.get(key).v;
   const v = { site: KNOWN[key]?.site ?? null, description: null, html: '', x: KNOWN[key]?.x ?? null };
-  // Metadata: contractURI() trước, rồi tokenURI của token có thật (token bạn giữ, token đầu tiên theo tokenByIndex), rồi token 1 / 0.
+  // Metadata: contractURI() trước, không có thì tokenURI của token đầu tiên.
   let meta = null;
-  const first = await tryCall(provider, address, metaI, 'tokenByIndex', [0n]);
-  const tries = [['contractURI', []], ...[...ids.slice(0, 2).map((i) => BigInt(i)), ...(first != null ? [first] : []), 1n, 0n].map((i) => ['tokenURI', [i]]), ['uri', [1n]]];
-  for (const [fn, args] of tries) {
+  for (const [fn, args] of [['contractURI', []], ['tokenURI', [1n]], ['tokenURI', [0n]], ['uri', [1n]]]) {
     const uri = await tryCall(provider, address, metaI, fn, args);
     if (!uri) continue;
     try { meta = await readJsonUri(String(uri).replace('{id}', '1'.padStart(64, '0')), fetchFn); } catch {}
@@ -278,10 +254,8 @@ export async function projectPage(provider, address, fetchFn = fetch, { ids = []
     if (meta) break;
   }
   if (meta) {
-    v.site ??= siteUrl(meta.external_link ?? meta.external_url ?? meta.website ?? meta.properties?.website ?? meta.properties?.external_url);
+    v.site ??= siteUrl(meta.external_link ?? meta.external_url ?? meta.website);
     if (meta.description) v.description = String(meta.description).slice(0, 600);
-    // Mô tả có ghi tên miền dự án (vd. "… on ptah.trade"): lấy làm web (bỏ mạng xã hội / sàn chung / chỗ lưu file).
-    v.site ??= siteFromText(v.description);
   }
   // Mã nguồn đã xác minh: chú thích của dự án + link website / X trong mã.
   const src = await verifiedSource(address, fetchFn).catch(() => ({ notes: [] }));
@@ -293,18 +267,8 @@ export async function projectPage(provider, address, fetchFn = fetch, { ids = []
   v.description ??= metaDescription(v.html);
   v.x ??= extractX(v.html, meta ?? {}) ?? extractX(v.description ?? '') ?? src.x ?? null;
   v.perWallet = rememberSite(address, `${strip(v.html.replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, ''))} ${v.description ?? ''}`);
-  pcache.set(key, { at: Date.now(), v, ids: ids.length > 0 });
+  pcache.set(key, { at: Date.now(), v });
   return v;
-}
-
-const NOT_SITE = /(^|\.)(x\.com|twitter\.com|t\.me|telegram\.|discord|github\.com|medium\.com|youtube|bscscan|etherscan|element\.market|opensea|binance\.com|pancakeswap)/i;
-export function siteFromText(text = '') {
-  for (const m of String(text).matchAll(/(?:https?:\/\/)?((?:[a-z0-9-]+\.)+(?:com|io|xyz|fun|trade|art|ai|app|me|org|net|gg|world|club|so|co|finance|market|bot|tech|dev|site|online|pro|vip|cc))(?=[\/\s"'),.;:!?]|$)/gi)) {
-    if (NOT_SITE.test(m[1]) || STORAGE.test(m[1])) continue;
-    const u = siteUrl(`https://${m[1].toLowerCase()}/`);
-    if (u) return u;
-  }
-  return null;
 }
 
 // Luật đầy đủ (chậm hơn, cần mạng ngoài): trang dự án → mục luật → dịch.

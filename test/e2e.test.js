@@ -16,7 +16,7 @@ test('giao diện web: quét, xem giá/giới hạn, Mint 2 có xác nhận', as
   const rpc = await startFakeRpc(38545);
   const cwd = mkdtempSync(join(tmpdir(), 'nftbot-'));
   const srv = spawn(process.execPath, [join(ROOT, 'src/server.js')], {
-    cwd, env: { ...process.env, PORT: String(PORT), NO_OPEN: '1', BSC_RPC_URL: 'http://127.0.0.1:38545', BAW_BIN: join(ROOT, 'test/fake-baw.mjs'), BNB_PRICE_SOURCE: 'onchain', FAKE_FETCH: JSON.stringify({ 'https://robots.example.com/': '<nav><a href="/market">Market</a></nav><p>Floor price: 0.04 BNB</p>' }) },
+    cwd, env: { ...process.env, PORT: String(PORT), NO_OPEN: '1', BSC_RPC_URL: 'http://127.0.0.1:38545', BAW_BIN: join(ROOT, 'test/fake-baw.mjs'), BNB_PRICE_SOURCE: 'onchain' },
   });
   let out = '';
   srv.stdout.on('data', (d) => (out += d));
@@ -32,11 +32,6 @@ test('giao diện web: quét, xem giá/giới hạn, Mint 2 có xác nhận', as
   assert.ok(state?.scan, 'scan không xong:\n' + out);
   const n = state.scan.nfts.find((x) => x.address.toLowerCase() === NFT);
   assert.ok(n, JSON.stringify(state.scan));
-  // Chỉ giữ NFT có web + chợ trên web; giá ghi trên web hiện để tham khảo.
-  assert.equal(n.market.ok, true);
-  assert.equal(n.market.url, 'https://robots.example.com/market');
-  assert.equal(n.ref.web[0].prices[0].priceBNB, 0.04);
-  assert.ok(!state.scan.nfts.some((x) => !x.market?.ok));
   assert.equal(n.priceBNB, 0.005);
   assert.equal(n.maxPerWallet, '2');
   assert.equal(n.maxQty, 2);

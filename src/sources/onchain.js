@@ -29,7 +29,6 @@ export function aggregateMints(logs) {
     const row = by.get(addr) ?? { address: addr, standard, mints: 0, minters: new Set(), firstBlock: log.blockNumber, lastBlock: log.blockNumber, txs: new Map() };
     row.mints += 1;
     row.minters.add(minter);
-    if (standard === 'ERC721') row.lastId = BigInt(log.topics[3]).toString(); // số token vừa mint, để đọc metadata (tìm web dự án)
     const t = row.txs.get(log.transactionHash) ?? { hash: log.transactionHash, n: 0, minter };
     t.n += 1;
     row.txs.set(log.transactionHash, t);
@@ -95,7 +94,6 @@ export async function scanOnchainMints(provider, cfg, log = console.log) {
     uniqueMinters: r.uniqueMinters,
     agentRatio: r.agentRatio,
     gem: Boolean(r.gem),
-    lastId: r.lastId ?? null,
     mintTxs: r.txs.slice(-10), // giao dịch mint gần nhất, để đọc giá người khác đang trả
     blocks: [r.firstBlock, r.lastBlock],
   }));
