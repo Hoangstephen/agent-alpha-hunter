@@ -91,6 +91,15 @@
 </ol>
 <p><b>自动挂单</b>（默认关闭）：勾选后设置相对铸造价的加价 %、底价和天数 → 保存。机器人每 15 分钟为未挂单的 NFT 挂单，价格取以下最高者：近期成交中位价、铸造价 + 加价、底价。没有参考价则不挂单。VPS：<code>node src/index.js element-key --key KEY</code>，然后 <code>node src/index.js autosell --on --markup 30 --min 0.01</code>。</p>
 
+<h2>在项目自己的市场出售（无需 Element）</h2>
+<ul>
+  <li>点击 <b>查找最高售价</b>。机器人会找到该系列交易的市场（例如 BN World 的 Onchain Agents 市场）。显示 <b>✓ 项目市场</b> 表示已验证：与 NFT 合约同一所有者、项目网站列出该市场地址，或有 5 个以上真实买家。</li>
+  <li><b>设置售价</b>：每个 NFT 第一次出售时，机器人只为<b>该 NFT</b> 申请 <code>approve(市场, tokenId)</code>，不会授权整个系列，售出后授权自动失效。然后调用市场的挂单函数。每一步都会模拟并需要你确认。</li>
+  <li>已挂单的 NFT 显示“已在市场 … 以 … BNB 挂单，至 …”，直接从链上读取。如果出现 ⚠“此 NFT 尚未授权”，点击 <b>授权此 NFT</b>，原挂单即可被购买，无需重新挂单。</li>
+  <li><b>立即卖给出价</b> 只在有人出价时可用。未验证的市场只显示链接，请在其网站自行出售。</li>
+  <li>撤销某市场的 NFT 授权：<b>代币授权 → 撤销 NFT 授权</b>（粘贴 NFT 合约地址和市场地址）。</li>
+</ul>
+
 <h2>在 VPS（终端）运行并推送到 Telegram</h2>
 <p>适合在无图形界面的 Linux VPS 上 24/7 运行。此模式下机器人<b>只扫描并提醒</b>热门 NFT / 💎 宝藏项目到 Telegram，<b>不会铸造</b>；看到合适的项目后，请在电脑上用网页界面照常铸造。</p>
 <ol>
@@ -124,6 +133,7 @@ pm2 logs alpha              # 查看日志</code></pre></li>
 <p>注意：安全分只是粗略筛选，不是认证。翻译的项目规则是对项目方文字的机器翻译。不要把助记词粘贴到任何地方，包括"客服"或 AI。</p>
 
 <h2>常见问题</h2>
+<p><b>“Developer Mode 已关闭”</b>：Agentic 钱包的 Developer Mode 有有效期，到期后 Binance 会自动关闭（钱包余额超过限额时也会关闭）。请在 Binance App → Agentic 钱包 → 设置 → Developer Mode 中重新开启。机器人会显示关闭时间并提前 60 分钟提醒。</p>
 <table>
   <tr><th>机器人提示</th><th>处理方法</th></tr>
   <tr><td><code>spawnSync baw ENOENT</code> 或"未安装 baw"</td><td>点击<b>安装 baw</b>，完成后重新登录</td></tr>

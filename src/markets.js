@@ -261,9 +261,11 @@ export async function onchainListings(provider, market, seller, { blocks = 200_0
   const head = await provider.getBlockNumber();
   const logs = await getLogsChunked(provider, { address: market, topics: [null, null, '0x' + pad(seller)] }, Math.max(0, head - blocks), head, chunk, { deadlineMs });
   const out = new Map();
-  for (const l of logs) {
+  for (const l of [...logs].sort((a, b) => a.blockNumber - b.blockNumber || (a.index ?? 0) - (b.index ?? 0))) {
     const words = (l.data ?? '0x').slice(2).match(/.{64}/g) ?? [];
-    if (l.topics.length !== 3 || words.length < 1) continue;
+    if (l.topics.length !== 3) continue;
+    // Sự kiện sau cùng không kèm giá (vd. Cancelled/TakenDown(tokenId, seller)) = đã gỡ lệnh.
+    if (words.length < 1) { out.delete(BigInt(l.topics[1]).toString()); continue; }
     const priceWei = BigInt('0x' + words[0]);
     const expires = words[1] ? Number(BigInt('0x' + words[1])) : 0;
     if (priceWei < 10n ** 12n || priceWei > 10n ** 24n) continue;

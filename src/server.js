@@ -11,13 +11,13 @@ import { connect, testRpc } from './chain.js';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { scanAll, summarize, markLookalikes } from './scanner.js';
 import { inspectContract, probeValue, MINTED_GETTERS } from './risk.js';
-import { tryCall, getLogsChunked } from './chain.js';
+import { getLogsChunked, multiRead } from './chain.js';
 import { prepareMint, previewMint, executeMint, previewApprove, executeApprove, waitReceipt, buildCall } from './mint.js';
 import { Ledger } from './ledger.js';
 import { bnbUsdt } from './price.js';
 import { sellReport } from './sell.js';
 import { lpLock } from './lp.js';
-import { findMarkets, trustMarket, findInstantSell, approveMarketData, approveTokenData, revokeMarketData, marketApproved, previewMarketCall, learnMarket, findListCall, markBadCall, onchainListings } from './markets.js';
+import { findMarkets, trustMarket, findInstantSell, approveTokenData, revokeMarketData, marketApproved, previewMarketCall, learnMarket, findListCall, markBadCall, onchainListings } from './markets.js';
 import { buildListing, checkListing, signListing, postListing, previewApproveElement, elementApi } from './list.js';
 import { autoSellConfig, saveAutoSell, autoSellTick, listedMap, markListed, mintCostBNB, suggestPrice } from './autosell.js';
 import { webRules, projectPage, translateTo } from './rules.js';
@@ -52,7 +52,15 @@ const big = (_, v) => (typeof v === 'bigint' ? v.toString() : v);
 
 // Địa chỉ ví Agentic dùng lần gần nhất (chỉ là địa chỉ công khai): phiên ví hết hạn vẫn xem được NFT và giá.
 function lastWallet() { try { return JSON.parse(readFileSync('data/last-wallet.json', 'utf8')).address ?? null; } catch { return null; } }
-function walletInfo() {
+// Mỗi lần hỏi ví là 3 lệnh baw (mỗi lệnh ~0,5–1 giây trên Windows): nhớ kết quả 10 giây.
+let walletCache = null;
+function walletInfo({ fresh = false } = {}) {
+  if (!fresh && walletCache && Date.now() - walletCache.at < 10_000) return walletCache.v;
+  const v = readWallet();
+  walletCache = { at: Date.now(), v };
+  return v;
+}
+function readWallet() {
   try {
     let status;
     try { status = wallet.walletStatus(); } catch (e) { if (e.code === 'BAW_MISSING') throw e; status = wallet.walletStatus(); } // lỗi thoáng qua: thử lại 1 lần
@@ -78,7 +86,7 @@ async function startLogin() {
   wallet.verify(qrCodeId)
     .then((v) => { state.login = v.success ? { pending: false, done: true } : { pending: false, error: v.error?.message ?? 'Mã QR hết hạn, bấm Đăng nhập lại.' }; })
     .catch((e) => { state.login = { pending: false, error: e.message }; })
-    .finally(() => log(`[ví] đăng nhập: ${state.login.done ? 'thành công' : state.login.error}`));
+    .finally(() => { walletCache = null; log(`[ví] đăng nhập: ${state.login.done ? 'thành công' : state.login.error}`); });
   return state.login;
 }
 
@@ -336,7 +344,7 @@ const api = {
     log(`[bán] đã đăng ${p.contract} #${p.tokenId} giá ${p.listing.priceBNB} BNB trên Element`);
     return { ok: true, ...posted };
   },
-  'GET /api/wallet': () => ({ ...walletInfo(), login: state.login, install: state.install }),
+  'GET /api/wallet': () => ({ ...walletInfo({ fresh: Boolean(state.login?.pending) }), login: state.login, install: state.install }),
   // Số dư: lấy từ baw (có giá USD), nếu lỗi thì đọc số dư BNB trực tiếp trên chain.
   'GET /api/balance': async () => {
     const w = walletInfo();
@@ -355,7 +363,7 @@ const api = {
   },
   'POST /api/baw/install': () => startInstall(),
   'POST /api/login': () => startLogin(),
-  'POST /api/logout': () => { state.login = null; return wallet.signout(); },
+  'POST /api/logout': () => { state.login = null; walletCache = null; return wallet.signout(); },
   // Chế độ "Chờ mở mint": gọi thử mint (eth_call, không gửi gì) để biết mint đã mở với ví này chưa.
   'POST /api/probe': async ({ address }) => {
     const w = walletInfo();
@@ -409,7 +417,11 @@ const api = {
       writeFileSync('data/rpc.json', JSON.stringify({ url }));
     } else rmSync('data/rpc.json', { force: true });
     cfg.rpcUrl = url;
-    state.provider = await connect(cfg, log);
+    // Mạng chập chờn lúc mở bot: thử lại mỗi 15 giây thay vì tắt cửa sổ.
+for (let n = 1; !state.provider; n++) {
+  try { state.provider = await connect(cfg, log); }
+  catch (e) { log(`[rpc] chưa kết nối được RPC (${e.message}). Thử lại sau 15 giây (lần ${n})…`); await new Promise((r) => setTimeout(r, 15_000)); }
+}
     runScan();
     return { ok: true, rpc: state.provider.url, logs: state.provider.logsUrl, custom: Boolean(url) };
   },
@@ -431,12 +443,15 @@ const api = {
     return { ok: true, agent: { ...r, tokenId: r.tokenId.toString() } };
   },
   // Số đã mint theo thời gian thực cho các thẻ đang hiện (giao diện hỏi 10 giây một lần).
+  // Số đã mint: gộp mọi thẻ vào 1 lệnh Multicall3, nhớ 8 giây (nhiều tab mở cùng lúc không nhân số lệnh RPC).
   'POST /api/live': async ({ items = [] }) => {
-    const rows = await Promise.all(items.slice(0, 20).filter((x) => isAddress(x?.address) && MINTED_GETTERS.includes(x?.getter)).map(async (x) => {
-      const v = await tryCall(state.provider, x.address, new Interface([`function ${x.getter}() view returns (uint256)`]), x.getter);
-      return { address: x.address, minted: v == null ? null : v.toString() };
-    }));
-    return { ok: true, rows };
+    const list = items.slice(0, 20).filter((x) => isAddress(x?.address) && MINTED_GETTERS.includes(x?.getter));
+    const key = list.map((x) => `${x.address}:${x.getter}`).join(',').toLowerCase();
+    if (state.live?.key === key && Date.now() - state.live.at < 8000) return state.live.v;
+    const vals = await multiRead(state.provider, list.map((x) => ({ target: x.address, iface: new Interface([`function ${x.getter}() view returns (uint256)`]), fn: x.getter })));
+    const v = { ok: true, rows: list.map((x, i) => ({ address: x.address, minted: vals[i] == null ? null : vals[i].toString() })) };
+    state.live = { key, at: Date.now(), v };
+    return v;
   },
   'POST /api/inspect': async ({ address }) => {
     const w = walletInfo();
@@ -515,6 +530,8 @@ const server = http.createServer(async (req, res) => {
     res.end(type === 'application/json' ? JSON.stringify(body, big) : body);
   };
   if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) return send(200, html, 'text/html; charset=utf-8');
+  // Chỉ nhận trang mở bằng 127.0.0.1 / localhost (chặn trang web lạ trỏ tên miền về máy bạn: DNS rebinding).
+  if (!ORIGINS.some((o) => o.endsWith('//' + req.headers.host))) return send(403, { error: 'host bị chặn' });
   const handler = api[`${req.method} ${req.url}`];
   if (!handler) return send(404, { error: 'not found' });
   if (req.method === 'POST' && !ORIGINS.includes(req.headers.origin)) return send(403, { error: 'origin bị chặn' });
@@ -541,6 +558,13 @@ state.provider = await connect(cfg, log);
 const refreshPrice = async () => { state.price = await bnbUsdt(state.provider).catch(() => state.price); };
 await refreshPrice();
 setInterval(refreshPrice, 60_000);
+server.on('error', (e) => {
+  if (e.code !== 'EADDRINUSE') throw e;
+  // Bot đã chạy ở cửa sổ khác: mở luôn trang đó, không chạy 2 bot cùng lúc.
+  log(`Cổng ${PORT} đang được dùng: bot đã chạy ở cửa sổ khác. Mở ${ORIGINS[0]}`);
+  openBrowser(ORIGINS[0]);
+  setTimeout(() => process.exit(0), 1500);
+});
 server.listen(PORT, '127.0.0.1', () => {
   const url = ORIGINS[0];
   log(`Mở ${url} trong trình duyệt`);

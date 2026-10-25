@@ -320,3 +320,16 @@ export async function tryCall(provider, to, iface, fn, args = []) {
 }
 
 export const topicToAddress = (t) => getAddress('0x' + t.slice(26));
+
+// Gộp nhiều lệnh đọc hợp đồng thành 1 lần gọi RPC qua Multicall3 (tiết kiệm hạn mức RPC riêng).
+// reads: [{ target, iface, fn, args }] → mảng kết quả đã giải mã (giá trị đầu) hoặc null nếu lệnh đó lỗi.
+const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11';
+const mc3 = new Interface(['function aggregate3((address target,bool allowFailure,bytes callData)[] calls) view returns ((bool success,bytes returnData)[])']);
+export async function multiRead(provider, reads) {
+  if (!reads.length) return [];
+  const calls = reads.map((r) => ({ target: r.target, allowFailure: true, callData: r.iface.encodeFunctionData(r.fn, r.args ?? []) }));
+  let res;
+  try { [res] = mc3.decodeFunctionResult('aggregate3', await provider.call({ to: MULTICALL3, data: mc3.encodeFunctionData('aggregate3', [calls]) })); }
+  catch { return Promise.all(reads.map((r) => tryCall(provider, r.target, r.iface, r.fn, r.args ?? []))); } // chain/RPC không có Multicall3: gọi từng cái
+  return res.map((x, i) => { try { return x.success ? reads[i].iface.decodeFunctionResult(reads[i].fn, x.returnData)[0] : null; } catch { return null; } });
+}

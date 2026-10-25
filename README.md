@@ -130,3 +130,8 @@ npm test   # 21 test offline (đã thêm ca giống Xuanwu Sigil): node BSC gi�
 **NFA · DYOR**: không phải lời khuyên tài chính, hãy tự tìm hiểu trước khi mint.
 
 x : [@HoangFUDSCAM](https://x.com/HoangFUDSCAM)
+
+### Bán trên chợ riêng của dự án
+- Bot tìm chợ của bộ NFT từ giao dịch gần đây, chỉ cấp quyền khi chợ kiểm chứng được (cùng chủ với hợp đồng NFT / web dự án ghi địa chỉ chợ / ≥ 5 người mua thật).
+- Luôn dùng `approve(chợ, tokenId)` cho **đúng 1 NFT**, không `setApprovalForAll` (chợ BN World chỉ hiện và bán được NFT có quyền này).
+- Lệnh rao bán đọc thẳng từ sự kiện của chợ trên chain; thiếu quyền thì có nút "Cấp quyền cho NFT này".

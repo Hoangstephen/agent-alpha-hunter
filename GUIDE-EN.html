@@ -91,6 +91,15 @@
 </ol>
 <p><b>Auto-listing</b> (off by default): tick it, set your markup over mint price, a floor price and days → <b>Save</b>. Every 15 minutes the bot lists NFTs not yet listed at the highest of: recent median sale price, mint price + markup, floor price. With no reference price it doesn't list. On a VPS: <code>node src/index.js element-key --key KEY</code> then <code>node src/index.js autosell --on --markup 30 --min 0.01</code>.</p>
 
+<h2>Sell on a project's own market (no Element needed)</h2>
+<ul>
+  <li>Click <b>Find best sell price</b>. The bot finds the market where the collection trades (for example BN World's Onchain Agents market). A <b>✓ project market</b> badge means the bot verified it: same owner as the NFT contract, listed on the project's site, or 5+ real buyers.</li>
+  <li><b>Set sale price</b>: the first time for each NFT the bot asks for <code>approve(market, tokenId)</code> for <b>that NFT only</b>, never the whole collection. The approval clears when it sells. Then it calls the market's list function. Every step is simulated and needs your confirmation.</li>
+  <li>Listed NFTs show "Listed … BNB on market … until …", read from the chain. If you see ⚠ "no approval for this NFT", click <b>Approve this NFT</b>: the existing listing becomes buyable, no need to list again.</li>
+  <li><b>Sell into an offer now</b> only works when someone has an open offer. Unverified markets only get a link so you can sell on their website.</li>
+  <li>Revoke an NFT approval for a market: <b>Token approvals → Revoke NFT rights</b> (paste the NFT contract and the market address).</li>
+</ul>
+
 <h2>Run on a VPS (terminal) with Telegram alerts</h2>
 <p>For 24/7 hunting on a Linux VPS with no GUI. In this mode the bot <b>only scans and alerts</b> hot NFTs / 💎 hidden gems to Telegram and <b>never mints</b>; when you see a good one, mint it on your computer with the web interface as usual.</p>
 <ol>
@@ -124,6 +133,7 @@ pm2 logs alpha              # view logs</code></pre></li>
 <p>Good to know: the safety score is a rough filter, not a certificate. Translated project rules are machine translations of text the project wrote. Never paste your seed phrase anywhere, including to "support agents" or AI.</p>
 
 <h2>Common problems</h2>
+<p><b>"Developer Mode is off"</b>: the Agentic Wallet's Developer Mode has an expiry; Binance turns it off when it expires (or when the wallet balance exceeds its limit). Turn it back on in the Binance app → Agentic Wallet → Settings → Developer Mode. The bot shows when it will turn off and warns 60 minutes ahead.</p>
 <table>
   <tr><th>The bot says</th><th>What to do</th></tr>
   <tr><td><code>spawnSync baw ENOENT</code> or "baw not installed"</td><td>Press <b>Install baw</b>, wait, then log in again</td></tr>

@@ -94,6 +94,15 @@
 </ol>
 <p><b>Tự đăng bán</b> (tắt mặc định): tick <b>Tự đăng bán NFT mới về ví</b>, đặt % lời so với giá mint, giá sàn, số ngày → <b>Lưu</b>. Mỗi 15 phút bot đăng các NFT chưa đăng với giá = cao nhất trong: giá bán trung vị gần đây, giá mint + % lời, giá sàn. Không có giá tham khảo thì bot không đăng. Trên VPS: <code>node src/index.js element-key --key KEY</code> rồi <code>node src/index.js autosell --on --markup 30 --min 0.01</code>.</p>
 
+<h2>Bán trên chợ riêng của dự án (không cần Element)</h2>
+<ul>
+  <li>Bấm <b>Tìm giá bán cao nhất</b>. Bot tự tìm chợ mà bộ NFT đang được mua bán (ví dụ chợ Onchain Agents của BN World). Chợ có dấu <b>✓ chợ của dự án</b> là chợ bot đã kiểm chứng được: cùng chủ với hợp đồng NFT, hoặc web dự án ghi địa chỉ chợ, hoặc có từ 5 người mua thật trở lên.</li>
+  <li><b>Đặt giá bán</b>: lần đầu với mỗi NFT, bot xin quyền <code>approve(chợ, số token)</code> cho <b>đúng NFT đó</b>, không cấp quyền cả bộ. Quyền tự mất khi NFT được bán. Sau đó bot gọi lệnh rao bán của chợ. Mỗi bước đều có mô phỏng và bạn bấm xác nhận.</li>
+  <li>NFT đã rao hiện "Đã đặt giá … BNB trên chợ … tới ngày …", đọc thẳng từ chain. Nếu có ⚠ "chưa có quyền cho riêng NFT này", bấm <b>Cấp quyền cho NFT này</b>: lệnh bán cũ dùng được ngay, không cần đặt giá lại.</li>
+  <li><b>Bán ngay vào lệnh mua</b> chỉ chạy khi chợ đang có người trả giá (offer). Chợ chưa kiểm chứng được thì bot chỉ hiện link để bạn tự bán trên web chợ.</li>
+  <li>Thu hồi quyền NFT cho 1 chợ: mục <b>Quyền token đã cấp → Thu hồi quyền NFT</b> (dán địa chỉ hợp đồng NFT và địa chỉ chợ).</li>
+</ul>
+
 <h2>Chạy trên VPS (terminal) và báo về Telegram</h2>
 <p>Dùng khi muốn bot săn 24/7 trên VPS Linux không có giao diện. Ở chế độ này bot <b>chỉ quét và báo</b> NFT hot / 💎 hidden gem về Telegram, <b>không mint</b>; thấy kèo thì bạn mint trên máy tính bằng giao diện web như bình thường.</p>
 <ol>
@@ -127,6 +136,7 @@ pm2 logs alpha              # xem nhật ký</code></pre></li>
 <p>Cần biết: điểm an toàn là bộ lọc thô, không phải chứng nhận. Luật dịch từ trang dự án là dịch máy và do dự án tự viết. Không dán seed phrase vào bất kỳ đâu, kể cả "hỗ trợ viên" hay AI.</p>
 
 <h2>Lỗi thường gặp</h2>
+<p><b>"Developer Mode đang tắt"</b>: Developer Mode của ví Agentic có thời hạn, Binance tự tắt khi hết giờ (hoặc khi số dư ví vượt mức cho phép). Bật lại trong app Binance → Ví Agentic → Cài đặt → Developer Mode. Bot hiện giờ tắt và báo trước 60 phút.</p>
 <table>
   <tr><th>Bot báo</th><th>Cách xử lý</th></tr>
   <tr><td><code>spawnSync baw ENOENT</code> hoặc "Chưa cài baw"</td><td>Bấm <b>Cài baw</b> trên giao diện, chờ xong rồi đăng nhập lại</td></tr>

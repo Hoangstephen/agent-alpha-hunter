@@ -790,7 +790,7 @@ $('asBtn').onclick = async () => {
 };
 loadAutoSell();
 
-// Số đã mint theo thời gian thực: hỏi lại hợp đồng 10 giây một lần cho các thẻ đang hiện.
+// Số đã mint theo thời gian thực: hỏi lại hợp đồng 15 giây một lần (1 lệnh RPC cho mọi thẻ) cho các thẻ đang hiện.
 setInterval(async () => {
   const els = [...document.querySelectorAll('[data-live]')];
   if (!els.length || document.hidden) return;
@@ -800,7 +800,7 @@ setInterval(async () => {
     if (row.minted == null) continue;
     document.querySelectorAll(`[data-live="${CSS.escape(row.address)}"]`).forEach((e) => { e.textContent = e.dataset.cap ? `${row.minted} / ${e.dataset.cap}` : row.minted; });
   }
-}, 10_000);
+}, 15_000);
 
 async function loadAgent() {
   const r = await api('/api/agent').catch(() => null);
@@ -884,6 +884,12 @@ document.addEventListener('click', (e) => {
     'Tìm NFT đang mint nóng, mint bằng Binance Agentic Wallet. Không phải lời khuyên đầu tư, luôn DYOR.': ['Find hot NFT mints and mint with Binance Agentic Wallet. Not financial advice, always DYOR.', '发现正在热铸的 NFT，用 Binance Agentic Wallet 铸造。非投资建议，请自行研究 (DYOR)。'],
     'Ví: đang kiểm tra…': ['Wallet: checking…', '钱包：检查中…'],
     'Quét lại': ['Rescan', '重新扫描'],
+    'Thu hồi': ['Revoke', '撤销'],
+    'Giá cao nhất tìm thấy': ['Best price found', '找到的最高价'],
+    'Đăng bán': ['List for sale', '挂单出售'],
+    'Đặt giá bán': ['Set sale price', '设置售价'],
+    'Bán ngay vào lệnh mua': ['Sell into an offer now', '立即卖给出价'],
+    'Cấp quyền cho NFT này': ['Approve this NFT', '授权此 NFT'],
     '🔄 Tìm lại': ['🔄 Search again', '🔄 重新搜索'],
     'Tìm lại': ['Search again', '重新搜索'],
     '⚙ RPC riêng (nhanh và ổn định hơn RPC công khai)': ['⚙ Private RPC (faster and more stable than public RPC)', '⚙ 私有 RPC（比公共 RPC 更快更稳定）'],
