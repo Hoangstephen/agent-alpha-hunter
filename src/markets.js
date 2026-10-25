@@ -255,6 +255,23 @@ export async function marketApproved(provider, nft, owner, market, tokenId, { pe
   try { return (await read('getApproved', [BigInt(tokenId)])).toLowerCase() === market.toLowerCase(); } catch { return false; }
 }
 
+// Lệnh rao bán của ví trên chợ, đọc thẳng từ chain (không cần file data/listed.json):
+// sự kiện của chợ có topic1 = số token, topic2 = ví người bán, data = [giá wei, hạn (giây)] (vd. Listed của BN World).
+export async function onchainListings(provider, market, seller, { blocks = 200_000, chunk = 5000, deadlineMs = 25_000 } = {}) {
+  const head = await provider.getBlockNumber();
+  const logs = await getLogsChunked(provider, { address: market, topics: [null, null, '0x' + pad(seller)] }, Math.max(0, head - blocks), head, chunk, { deadlineMs });
+  const out = new Map();
+  for (const l of logs) {
+    const words = (l.data ?? '0x').slice(2).match(/.{64}/g) ?? [];
+    if (l.topics.length !== 3 || words.length < 1) continue;
+    const priceWei = BigInt('0x' + words[0]);
+    const expires = words[1] ? Number(BigInt('0x' + words[1])) : 0;
+    if (priceWei < 10n ** 12n || priceWei > 10n ** 24n) continue;
+    out.set(BigInt(l.topics[1]).toString(), { priceBNB: Number(priceWei) / 1e18, expiresAt: expires > 1e9 && expires < 1e11 ? new Date(expires * 1000).toISOString() : null, txHash: l.transactionHash, market, block: l.blockNumber });
+  }
+  return out;
+}
+
 // Thay đổi số dư Binance mô phỏng (tên trường có thể khác nhau giữa các bản).
 export const readChanges = (list = []) => list.map((b) => ({ symbol: b.symbol ?? b.tokenSymbol ?? b.token ?? b.asset ?? '?', amount: String(b.amount ?? b.change ?? b.value ?? b.delta ?? '?') }));
 

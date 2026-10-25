@@ -372,3 +372,14 @@ test('marketApproved perToken: quyền cả bộ không đủ, cần approve(ch�
   assert.equal(await marketApproved(p(ZeroAddress), NFT, MAKER, MK, 1, { perToken: true }), false);
   assert.equal(await marketApproved(p(MK), NFT, MAKER, MK, 1, { perToken: true }), true);
 });
+
+test('onchainListings: đọc lệnh rao bán của ví từ sự kiện chợ (Listed tokenId, seller, price, expiresAt)', async () => {
+  const { onchainListings } = await import('../src/markets.js');
+  const { zeroPadValue, parseEther: pe } = await import('ethers');
+  const MK = '0xC6cBc2C06ae66d201A761FAa8Ac48aD92B835704';
+  const W = (v) => BigInt(v).toString(16).padStart(64, '0');
+  const p = { getBlockNumber: async () => 1000, getLogs: async () => [{ address: MK, blockNumber: 990, transactionHash: '0xabc', topics: ['0x5b886b3c15d339ca3333d6712726a9665b4ded99f69cce925f48e03f1e891dcd', zeroPadValue('0x0dc3', 32), zeroPadValue(MAKER, 32)], data: '0x' + W(pe('0.004')) + W(1795510242) }] };
+  const m = await onchainListings(p, MK, MAKER);
+  assert.equal(m.get('3523').priceBNB, 0.004);
+  assert.equal(m.get('3523').expiresAt, '2026-11-24T08:50:42.000Z');
+});

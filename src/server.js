@@ -17,7 +17,7 @@ import { Ledger } from './ledger.js';
 import { bnbUsdt } from './price.js';
 import { sellReport } from './sell.js';
 import { lpLock } from './lp.js';
-import { findMarkets, trustMarket, findInstantSell, approveMarketData, approveTokenData, revokeMarketData, marketApproved, previewMarketCall, learnMarket, findListCall, markBadCall } from './markets.js';
+import { findMarkets, trustMarket, findInstantSell, approveMarketData, approveTokenData, revokeMarketData, marketApproved, previewMarketCall, learnMarket, findListCall, markBadCall, onchainListings } from './markets.js';
 import { buildListing, checkListing, signListing, postListing, previewApproveElement, elementApi } from './list.js';
 import { autoSellConfig, saveAutoSell, autoSellTick, listedMap, markListed, mintCostBNB, suggestPrice } from './autosell.js';
 import { webRules, projectPage, translateTo } from './rules.js';
@@ -162,9 +162,17 @@ const api = {
     const a = autoSellConfig();
     for (const h of r.holdings) {
       const suggest = suggestPrice({ medianBNB: h.sales?.medianBNB, costBNB: mintCostBNB(h.contract) }, a);
+      // Lệnh rao bán trên chợ riêng, đọc từ chain (kể cả lệnh đặt bằng bản cũ / máy khác).
+      const chainListed = new Map();
+      if (!manual) for (const mk of (h.markets ?? []).filter((x) => x.trust)) {
+        const m = await onchainListings(state.provider, mk.address, addr).catch(() => new Map());
+        for (const [k, v] of m) chainListed.set(k, v);
+      }
       for (const it of h.items ?? []) {
         const l = listed[`${h.contract.toLowerCase()}:${it.tokenId}`];
         if (l && !l.failed && Date.parse(l.expiresAt) > Date.now()) it.listed = l;
+        const c = chainListed.get(String(it.tokenId));
+        if (c && (!c.expiresAt || Date.parse(c.expiresAt) > Date.now())) it.listed = { ...it.listed, ...c }; // chain là nguồn đúng nhất
         if (it.listed?.market && !manual) it.listed.needsApprove = !(await marketApproved(state.provider, h.contract, addr, it.listed.market, it.tokenId, { perToken: true }));
         it.suggestBNB = suggest;
       }
