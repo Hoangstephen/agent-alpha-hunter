@@ -8,6 +8,7 @@ import { Interface, id, getAddress } from 'ethers';
 import { getLogsChunked, multiRead } from './chain.js';
 import { listingEvents, singleCollection } from './markets.js';
 import { fetchText, siteTexts } from './rules.js';
+import { KNOWN } from './projects.js';
 
 const nftI = new Interface(['function ownerOf(uint256) view returns (address)', 'function getApproved(uint256) view returns (address)', 'function isApprovedForAll(address,address) view returns (bool)']);
 const cache = new Map();
@@ -115,6 +116,8 @@ const root = (h) => h.split('.').slice(-2).join('.');
 // Web dự án có chợ mua bán NFT không. Có khi web ghi địa chỉ hợp đồng chợ của bộ NFT này
 // (trong trang hoặc file JS của trang), hoặc có mục / link Market, Marketplace, Trade… cùng tên miền.
 export async function siteMarket(provider, nft, page, { markets = [], fetchFn = fetch } = {}) {
+  const known = KNOWN[nft.toLowerCase()]?.market;
+  if (known) return { ok: true, why: null, site: page?.site ?? known.url, contract: known.contract, url: known.url, via: 'known' };
   if (!page?.site) return { ok: false, why: 'no-site', site: null };
   const site = page.site;
   const texts = await siteTexts(site, page.html, fetchFn).catch(() => [page.html ?? '']);

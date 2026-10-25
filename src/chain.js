@@ -153,10 +153,45 @@ export class MultiRpc {
           else this.li = Math.max(0, this.logUrls.indexOf(this.lpUrl));
           continue;
         }
-        if (this.lp === p) { this.log(`[rpc] lấy log lỗi ở ${hostOf(u)}: ${errText(e)}`); this.rotateLogs(); }
+        if (this.lp === p) {
+          this.logOnce(`lấy log lỗi ở ${hostOf(u)}: ${errText(e)}`);
+          // Chỉ còn 1 RPC lấy log mà nó lỗi liên tục: dò lại cả danh sách tìm RPC khác lấy log được.
+          if (this.logUrls.length === 1 || k >= 3) this.reprobeLogs();
+          this.rotateLogs();
+        }
       }
     }
     throw last;
+  }
+
+  // Cùng 1 thông báo chỉ in 1 lần mỗi 30 giây (tránh nhật ký đầy dòng lặp lại).
+  logOnce(m) {
+    this.said ??= new Map();
+    if (Date.now() - (this.said.get(m) ?? 0) < 30_000) return;
+    this.said.set(m, Date.now());
+    this.log(`[rpc] ${m}`);
+  }
+
+  // Dò lại mọi RPC (kể cả RPC riêng) xem cái nào lấy log được, tối đa 1 lần mỗi 2 phút, chạy nền.
+  reprobeLogs() {
+    if (this.reprobing || Date.now() - (this.reprobedAt ?? 0) < 120_000) return;
+    this.reprobing = true;
+    this.reprobedAt = Date.now();
+    const all = [...new Set([...(this.custom ? [this.custom] : []), ...this.urls])].filter((u) => !NO_LOGS.test(u));
+    Promise.allSettled(all.map(async (u) => {
+      const p = this.factory(u);
+      const t0 = Date.now();
+      const head = await withTimeout(p.getBlockNumber(), 6000);
+      await withTimeout(p.getLogs({ fromBlock: head - 2000, toBlock: head, topics: [TOPIC.TRANSFER, null, TOPIC.ZERO] }), 8000);
+      return { u, ms: Date.now() - t0 };
+    })).then((rs) => {
+      const ok = rs.filter((r) => r.status === 'fulfilled').map((r) => r.value).sort((a, b) => (a.u === this.custom ? -1 : b.u === this.custom ? 1 : a.ms - b.ms));
+      if (!ok.length) return this.logOnce('dò lại: chưa RPC nào lấy log được, nên dùng RPC riêng (NodeReal)');
+      this.logUrls = ok.map((r) => r.u);
+      this.fails.clear();
+      this.li = 0; this.lpUrl = this.logUrls[0]; this.lp = this.factory(this.lpUrl);
+      this.log(`[rpc] dò lại xong: lấy log qua ${hostOf(this.lpUrl)} (${ok.length} RPC lấy log được)`);
+    }).finally(() => { this.reprobing = false; });
   }
 
   // Thử mọi RPC cùng lúc. Đọc hợp đồng: RPC trả blockNumber nhanh nhất.

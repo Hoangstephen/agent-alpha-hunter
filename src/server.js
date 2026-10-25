@@ -18,7 +18,8 @@ import { bnbUsdt } from './price.js';
 import { sellReport } from './sell.js';
 import { lpLock } from './lp.js';
 import { findMarkets, trustMarket, findInstantSell, approveTokenData, revokeMarketData, marketApproved, previewMarketCall, learnMarket, findListCall, markBadCall, onchainListings } from './markets.js';
-import { listedMap, markListed, mintCostBNB, suggestPrice } from './listed.js';
+import { listedMap, markListed, mintCostBNB, suggestPrice, ownedContracts, rememberOwned } from './listed.js';
+import { KNOWN } from './projects.js';
 import { webRules, projectPage, translateTo } from './rules.js';
 import { notifyScan } from './telegram.js';
 import { watchList, watchAdd } from './watch.js';
@@ -169,9 +170,13 @@ const api = {
       ...new Ledger().rows.map((r) => r.target),
       ...watchList(),
       ...(state.scan?.nfts ?? []).map((n) => n.address),
+      ...(state.scan?.skipped ?? []).map((n) => n.address), // NFT không có chợ trên web vẫn có thể đang nằm trong ví
+      ...ownedContracts(addr),
+      ...Object.keys(KNOWN),
       ...extra.filter((a) => isAddress(a)),
     ];
     const r = await sellReport(state.provider, cfg, addr, contracts, { bnbUsdt: state.price?.price, log, mintTxs: new Ledger().rows });
+    try { rememberOwned(addr, r.holdings.map((h) => h.contract)); } catch {}
     // Lệnh bán đang treo (bot đã đăng) + giá gợi ý để đăng bán.
     const listed = listedMap();
     for (const h of r.holdings) {
@@ -364,11 +369,7 @@ const api = {
       writeFileSync('data/rpc.json', JSON.stringify({ url }));
     } else rmSync('data/rpc.json', { force: true });
     cfg.rpcUrl = url;
-    // Mạng chập chờn lúc mở bot: thử lại mỗi 15 giây thay vì tắt cửa sổ.
-for (let n = 1; !state.provider; n++) {
-  try { state.provider = await connect(cfg, log); }
-  catch (e) { log(`[rpc] chưa kết nối được RPC (${e.message}). Thử lại sau 15 giây (lần ${n})…`); await new Promise((r) => setTimeout(r, 15_000)); }
-}
+    state.provider = await connect(cfg, log); // dùng ngay RPC vừa lưu (đọc hợp đồng + lấy log)
     runScan();
     return { ok: true, rpc: state.provider.url, logs: state.provider.logsUrl, custom: Boolean(url) };
   },
@@ -501,7 +502,11 @@ function openBrowser(url) {
   try { spawn(cmd[0], cmd[1], { stdio: 'ignore', detached: true }).on('error', () => {}).unref(); } catch {}
 }
 
-state.provider = await connect(cfg, log);
+// Mạng chập chờn lúc mở bot: thử lại mỗi 15 giây thay vì tắt cửa sổ.
+for (let n = 1; !state.provider; n++) {
+  try { state.provider = await connect(cfg, log); }
+  catch (e) { log(`[rpc] chưa kết nối được RPC (${e.message}). Thử lại sau 15 giây (lần ${n})…`); await new Promise((r) => setTimeout(r, 15_000)); }
+}
 const refreshPrice = async () => { state.price = await bnbUsdt(state.provider).catch(() => state.price); };
 await refreshPrice();
 setInterval(refreshPrice, 60_000);

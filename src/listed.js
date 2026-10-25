@@ -33,3 +33,14 @@ export function suggestPrice({ medianBNB, costBNB, floorBNB }, a = SUGGEST) {
   if (a.minPriceBNB > 0) c.push(a.minPriceBNB);
   return up4(Math.max(...c));
 }
+
+// Bộ NFT ví từng giữ (data/owned.json): luôn kiểm tra lại, không phụ thuộc RPC lấy log hay danh sách NFT hot.
+const OWNED = 'data/owned.json';
+export const ownedContracts = (wallet, path = OWNED) => readJson(path, {})[String(wallet).toLowerCase()] ?? [];
+export function rememberOwned(wallet, contracts, path = OWNED) {
+  const m = readJson(path, {});
+  const k = String(wallet).toLowerCase();
+  m[k] = [...new Set([...(m[k] ?? []), ...contracts.map((c) => c.toLowerCase())])];
+  mkdirSync('data', { recursive: true });
+  writeFileSync(path, JSON.stringify(m, null, 2));
+}

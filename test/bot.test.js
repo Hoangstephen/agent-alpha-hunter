@@ -559,3 +559,21 @@ test('toIso: đọc giờ hết hạn Developer Mode từ baw', () => {
   assert.equal(toIso(1793526813), '2026-11-01T09:53:33.000Z');
   assert.equal(toIso(null), null);
 });
+
+test('MultiRpc: RPC lấy log duy nhất lỗi liên tục ("missing response") thì dò lại và chuyển sang RPC lấy log được; lỗi lặp chỉ in 1 lần', async () => {
+  const lines = [];
+  let logsOk = { 'https://one': true, 'https://two': false };
+  const factory = (u) => ({
+    getBlockNumber: async () => 100,
+    getLogs: async () => { if (!logsOk[u]) throw new Error('missing response for request'); return [{ u }]; },
+  });
+  const m = await new MultiRpc(['https://one', 'https://two'], { factory, log: (l) => lines.push(l) }).init();
+  assert.equal(m.logsUrl, 'https://one');
+  assert.deepEqual(m.logUrls, ['https://one']); // lúc mở chỉ 1 RPC lấy log được
+  logsOk = { 'https://one': false, 'https://two': true }; // sau đó RPC đó hỏng, RPC kia lại chạy
+  for (let i = 0; i < 4; i++) await m.getLogs({}).catch(() => {});
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(m.logsUrl, 'https://two');
+  assert.deepEqual(await m.getLogs({}), [{ u: 'https://two' }]);
+  assert.equal(lines.filter((l) => l.includes('lấy log lỗi ở one')).length, 1);
+});

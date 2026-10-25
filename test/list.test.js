@@ -338,7 +338,7 @@ test('Ví: lỗi tạm của Binance không làm báo Developer Mode tắt; hế
 test('siteMarket: web có mục Market / ghi địa chỉ chợ thì có chợ; link sàn ngoài (Element, OpenSea) không tính', async () => {
   const { siteMarket, looksLikeMarket } = await import('../src/refprice.js');
   const { id: h } = await import('ethers');
-  const NFTC = '0xC4605C6A7765138784B3ca6F9a88e1c249a0d21f';
+  const NFTC = '0xA1A1000000000000000000000000000000000b0b';
   const MKT = '0xC6cBc2C06ae66d201A761FAa8Ac48aD92B835704';
   const MINTER = '0x9999999999999999999999999999999999999999';
   const code = (sigs) => '0x6080' + NFTC.slice(2).toLowerCase() + sigs.map((f) => '63' + h(f).slice(2, 10)).join('');
@@ -354,4 +354,7 @@ test('siteMarket: web có mục Market / ghi địa chỉ chợ thì có chợ; 
   const c = await siteMarket(p, NFTC, page('<a href="https://element.market/collections/x">Trade on Element</a><a href="https://opensea.io/x">Market</a>'), { fetchFn: noFetch });
   assert.deepEqual([c.ok, c.why], [false, 'no-market']);
   assert.equal((await siteMarket(p, NFTC, null)).why, 'no-site');
+  // Onchain Agents: web dựng bằng JavaScript, chợ đã biết sẵn.
+  const oa = await siteMarket(p, '0xC4605C6A7765138784B3ca6F9a88e1c249a0d21f', page('<div id="root"></div>'));
+  assert.deepEqual([oa.ok, oa.via, oa.contract], [true, 'known', MKT]);
 });

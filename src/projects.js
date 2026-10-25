@@ -15,6 +15,14 @@ export const KNOWN = {
       'Mint thành công thì NFT về ví đã mint.',
     ],
   },
+  // Onchain Agents (BN World): web dựng bằng JavaScript nên bot không đọc được mục chợ trong HTML; chợ đã kiểm trên chain
+  // (list(tokenId, giá, số ngày), sự kiện Listed, chợ chỉ hiện NFT có approve(chợ, số token)).
+  '0xc4605c6a7765138784b3ca6f9a88e1c249a0d21f': {
+    name: 'Onchain Agents',
+    site: 'https://bncworld.fun/',
+    needsAgentId: true,
+    market: { contract: '0xC6cBc2C06ae66d201A761FAa8Ac48aD92B835704', url: 'https://bncworld.fun/' },
+  },
   '0xe397a4776f9e7cdc016c332b15756325e4aac84b': {
     name: 'Xuanwu Sigil (EX-00)',
     site: 'https://mchain.art',

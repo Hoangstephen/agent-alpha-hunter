@@ -28,6 +28,12 @@
   button:disabled { opacity:.4; cursor:not-allowed; }
   input { font:inherit; padding:7px 10px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--text); flex:1; min-width:0; }
   .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); }
+  .wide { grid-column:1/-1; }
+  .empty { background:var(--card); border:1px dashed var(--line); border-radius:12px; padding:18px; text-align:center; color:var(--muted); font-size:14px; }
+  .skipbox { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 14px; font-size:13px; }
+  .skipbox summary { cursor:pointer; color:var(--muted); }
+  .skipbox table { margin-top:8px; }
+  .skipbox td { padding:4px 8px 4px 0; border-top:1px solid var(--line); }
   .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; display:flex; flex-direction:column; gap:8px; }
   .card h3 { margin:0; font-size:16px; display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
   .card h3 .badges { display:flex; gap:4px; flex-shrink:0; }
@@ -335,8 +341,8 @@ async function refresh() {
     shownScan = s.scan.scannedAt;
     $('scanInfo').textContent = s.scan.partial ? '· đang cập nhật…' : `· cập nhật ${new Date(s.scan.scannedAt).toLocaleTimeString()}${s.scan.durationMs ? ` · quét mất ${Math.round(s.scan.durationMs / 1000)} giây` : ''}`;
     const sk = s.scan.skipped || [];
-    const skHtml = sk.length ? `<details class="muted" style="margin-top:8px"><summary>Bỏ qua ${sk.length} NFT không có web hoặc web không có chợ</summary>${sk.map((x) => `<div>${esc(x.name || short(x.address))} · <a href="https://bscscan.com/address/${esc(x.address)}" target="_blank" rel="noopener">${esc(short(x.address))}</a> · ${x.why === 'no-site' ? 'không tìm thấy web dự án' : 'web không có chợ mua bán'}</div>`).join('')}</details>` : '';
-    $('nfts').innerHTML = (s.scan.nfts.length ? s.scan.nfts.map(card).join('') : `<div class="muted">${s.scan.partial ? 'Đang tìm…' : 'Chưa thấy NFT nào mint nóng có web và chợ trên web trong ~10 phút qua.'}</div>`) + skHtml;
+    const skHtml = sk.length ? `<details class="skipbox wide"><summary>Đã bỏ qua ${sk.length} NFT đang mint vì không có web hoặc web không có chợ (bấm để xem)</summary><table>${sk.map((x) => `<tr><td>${esc(x.name || 'Không rõ tên')}</td><td class="addr"><a href="https://bscscan.com/address/${esc(x.address)}" target="_blank" rel="noopener">${esc(short(x.address))}</a></td><td>${x.why === 'no-site' ? 'Không tìm thấy web dự án' : 'Web không có chợ mua bán'}</td><td><button class="chip" data-probe="${esc(x.address)}">Kiểm tra</button></td></tr>`).join('')}</table></details>` : '';
+    $('nfts').innerHTML = (s.scan.nfts.length ? s.scan.nfts.map(card).join('') : `<div class="empty wide">${s.scan.partial ? 'Đang tìm NFT có web và chợ…' : '🔎 Chưa có NFT đang mint nào có web và chợ trên web trong ~10 phút qua.<br><span style="font-size:12px">Bot tự tìm lại sau mỗi 5 phút. NFT bị bỏ qua nằm trong danh sách bên dưới, bấm "Kiểm tra" để xem chi tiết.</span>'}</div>`) + skHtml;
     document.querySelectorAll('#nfts [data-qty]').forEach((i) => syncQty(i.closest('.card')));
     $('tokens').innerHTML = s.scan.tokens.length
       ? `<table><tr><th>Tên</th><th>Mã</th><th>Token</th><th>Thanh khoản (LP)</th></tr>${s.scan.tokens.slice(0, 8).map((t) => `<tr><td>${esc(t.name)}</td><td>${esc(t.symbol)}</td><td class="addr"><a href="https://bscscan.com/token/${esc(t.address)}" target="_blank" rel="noopener">${esc(short(t.address))}</a></td><td data-lpbox="${esc(t.address)}">${lpResults.get(t.address) ?? `<button data-lp="${esc(t.address)}" data-quote="${esc(t.quote || '')}">Kiểm tra khoá LP</button>`}</td></tr>`).join('')}</table>`
@@ -615,7 +621,7 @@ $('sellBtn').onclick = async () => {
   $('sell').innerHTML = (rows.length
     ? `<table><tr><th>NFT</th><th>Giá cao nhất tìm thấy</th><th>Đăng bán</th><th></th></tr>${rows.map(({ h, it }) => `<tr>
         <td>${esc(h.name || 'NFT')} ${it.tokenId != null ? '#' + esc(String(it.tokenId).length > 12 ? String(it.tokenId).slice(0, 6) + '…' + String(it.tokenId).slice(-4) : it.tokenId) : `(x${esc(h.balance)})`}<div class="addr">${esc(short(h.contract))}</div></td>
-        <td>${h.noMarket ? '<span class="muted">Không có chợ trên web dự án: không định giá</span>' : fmt(it.best, h) + refBox(h)}</td>
+        <td>${h.noMarket ? `<span class="muted">${h.noMarket === 'no-site' ? 'Không tìm thấy web dự án' : 'Web dự án không có chợ'}: không định giá</span>` : fmt(it.best, h) + refBox(h)}</td>
         <td>${listCell(r, h, it)}</td>
         <td>${marketLinks(h, it)}${h.siteMarket?.ok && !h.siteMarket.contract ? `<a href="${esc(h.siteMarket.url)}" target="_blank" rel="noopener"><b>Đặt giá trên chợ của web</b></a><br>` : ''}${h.site ? `<a href="${esc(h.site)}" target="_blank" rel="noopener">Web dự án</a><br>` : ''}<a href="https://bscscan.com/token/${esc(h.contract)}?a=${esc(r.wallet)}" target="_blank" rel="noopener">BscScan</a></td>
       </tr>`).join('')}</table>`
@@ -625,6 +631,14 @@ $('sellBtn').onclick = async () => {
 };
 
 let lastSell = null;
+// "Kiểm tra" 1 NFT bị bỏ qua: đưa địa chỉ vào ô kiểm tra rồi chạy như bấm tay.
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-probe]');
+  if (!b) return;
+  $('addr').value = b.dataset.probe;
+  $('addr').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('checkBtn').click();
+});
 // Giá tham khảo bot tự tìm: lệnh rao bán của người khác trên chợ riêng + giá ghi trên web dự án / web chợ.
 function refBox(h) {
   const ref = h.ref;
@@ -652,7 +666,7 @@ function marketLinks(h, it) {
 }
 
 function listCell(r, h, it) {
-  if (h.noMarket) return `<span class="muted">${h.noMarket === 'no-site' ? 'Không tìm thấy web dự án' : 'Web dự án không có chợ'}: bỏ qua</span>`;
+  if (h.noMarket) return '<span class="muted">Bỏ qua (vẫn đang nằm trong ví)</span>';
   if (it.listed?.market) return `<span class="ok">Đã đặt giá ${esc(bnb(it.listed.priceBNB))} BNB trên chợ ${esc(short(it.listed.market))}</span><br><span class="muted">${it.listed.expiresAt ? `tới ${esc(new Date(it.listed.expiresAt).toLocaleDateString())}` : it.listed.at ? `lúc ${esc(new Date(it.listed.at).toLocaleString())}` : ''} ·</span> <a href="https://bscscan.com/tx/${esc(it.listed.txHash)}" target="_blank" rel="noopener">giao dịch</a>`
     + (it.listed.needsApprove ? `<br><span class="warn">⚠ Chợ chưa có quyền cho riêng NFT này nên chưa ai mua được.</span><br><button class="primary" data-msell="${esc(it.listed.market)}" data-mode="approve" data-mnft="${esc(h.contract)}" data-mtid="${esc(it.tokenId)}" data-mname="${esc(h.name || 'NFT')}">Cấp quyền cho NFT này</button>` : '');
   if (it.tokenId == null) return '<span class="muted">Chưa biết số token</span>';
