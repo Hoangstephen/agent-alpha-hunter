@@ -11,7 +11,7 @@ import { connect, testRpc } from './chain.js';
 import { writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { scanAll, summarize, markLookalikes } from './scanner.js';
 import { inspectContract, probeValue, MINTED_GETTERS } from './risk.js';
-import { tryCall } from './chain.js';
+import { tryCall, getLogsChunked } from './chain.js';
 import { prepareMint, previewMint, executeMint, previewApprove, executeApprove, waitReceipt, buildCall } from './mint.js';
 import { Ledger } from './ledger.js';
 import { bnbUsdt } from './price.js';
@@ -256,7 +256,15 @@ const api = {
       if (noMarketLog) {
         log(`[bán] ⚠ đặt giá ${p.contract} #${p.tokenId}: giao dịch thành công nhưng chợ ${p.market} không ghi sự kiện nào. Bot sẽ không dùng lại hàm ${p.data.slice(0, 10)} trên chợ này.`);
         // Hàm này từng tạo được lệnh rao bán (có sự kiện) thì lần này chỉ là đặt lại NFT đã rao: không đánh dấu hỏng.
-        const before = Object.values(listedMap()).some((l) => l.market === p.market && l.selector === p.data.slice(0, 10));
+        let before = Object.values(listedMap()).some((l) => l.market === p.market && l.selector === p.data.slice(0, 10));
+        // Hoặc NFT này đã được rao trước đó (sự kiện cũ của chợ có số token + ví bạn, vd. Listed(tokenId, seller, …)).
+        if (!before) {
+          const head = await state.provider.getBlockNumber().catch(() => 0);
+          const old = head ? await getLogsChunked(state.provider, { address: p.market, topics: [null, '0x' + BigInt(p.tokenId).toString(16).padStart(64, '0')] }, Math.max(0, head - 200_000), head, 5000, { deadlineMs: 20_000 }).catch(() => []) : [];
+          const me = walletInfo().address?.toLowerCase().slice(2);
+          before = old.some((l) => l.topics.some((t) => me && t.toLowerCase().endsWith(me)));
+          if (before) markListed(`${p.contract.toLowerCase()}:${p.tokenId}`, { priceBNB: p.priceBNB, market: p.market, site: p.site, txHash: old.at(-1).transactionHash, selector: p.data.slice(0, 10), expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString() });
+        }
         if (!before) markBadCall(p.market, p.data, 'không ghi sự kiện rao bán');
       }
       else markListed(`${p.contract.toLowerCase()}:${p.tokenId}`, { priceBNB: p.priceBNB, market: p.market, site: p.site, txHash: r.txHash, selector: p.data.slice(0, 10), expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString() });
