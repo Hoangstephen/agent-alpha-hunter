@@ -170,7 +170,7 @@ const api = {
     const listed = listedMap();
     const a = autoSellConfig();
     for (const h of r.holdings) {
-      const suggest = suggestPrice({ medianBNB: h.sales?.medianBNB, costBNB: mintCostBNB(h.contract) }, a);
+      const suggest = suggestPrice({ medianBNB: h.sales?.medianBNB, costBNB: mintCostBNB(h.contract), floorBNB: h.ref?.floorBNB }, a);
       // Lệnh rao bán trên chợ riêng, đọc từ chain (kể cả lệnh đặt bằng bản cũ / máy khác).
       const chainListed = new Map();
       if (!manual) for (const mk of (h.markets ?? []).filter((x) => x.trust)) {

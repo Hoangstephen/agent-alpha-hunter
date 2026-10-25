@@ -94,6 +94,7 @@
 <h2>Sell on a project's own market (no Element needed)</h2>
 <ul>
   <li>Click <b>Find best sell price</b>. The bot finds the market where the collection trades (for example BN World's Onchain Agents market). A <b>✓ project market</b> badge means the bot verified it: same owner as the NFT contract, listed on the project's site, or 5+ real buyers.</li>
+  <li><b>Reference prices</b> (under the price column): the bot reads the cheapest live listing by other sellers on the project market (only unexpired listings whose seller still holds the NFT) and prices written on the project / market website (Floor, Price…). The suggested price never goes below that cheapest listing. Website prices may be outdated, double-check them.</li>
   <li><b>Set sale price</b>: the first time for each NFT the bot asks for <code>approve(market, tokenId)</code> for <b>that NFT only</b>, never the whole collection. The approval clears when it sells. Then it calls the market's list function. Every step is simulated and needs your confirmation.</li>
   <li>Listed NFTs show "Listed … BNB on market … until …", read from the chain. If you see ⚠ "no approval for this NFT", click <b>Approve this NFT</b>: the existing listing becomes buyable, no need to list again.</li>
   <li><b>Sell into an offer now</b> only works when someone has an open offer. Unverified markets only get a link so you can sell on their website.</li>

@@ -10,6 +10,7 @@ import { STABLES } from './risk.js';
 import { ADDR } from './config.js';
 import { projectPage } from './rules.js';
 import { findMarkets } from './markets.js';
+import { refPrices } from './refprice.js';
 
 const WBNB = '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c';
 const USDT = '0x55d398326f99059ff775485246999027b3197955';
@@ -255,6 +256,8 @@ export async function elementOffers(cfg, wallet, fetchFn = fetch) {
   return { enabled: true, offers };
 }
 
+const hostOf = (u) => { try { return new URL(u).hostname; } catch { return null; } };
+
 export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, log, cachePath, mintTxs = [], sellCachePath = 'data/sell-cache.json' } = {}) {
   const [received, fromTxs] = await Promise.all([
     receivedNfts(provider, wallet, { chunk: cfg.scan.chunkByAddress ?? 2000, log, cachePath }).catch(() => new Map()),
@@ -287,6 +290,8 @@ export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, lo
     if (!h.sales?.count && fresh && prev.sales?.count) Object.assign(h, { sales: prev.sales, salesCached: prev.at });
     if (!h.markets?.length && fresh && prev.markets?.length) Object.assign(h, { markets: prev.markets, marketsCached: prev.at });
     h.logsIncomplete = !logs || Boolean(logs.incomplete);
+    // Giá tham khảo: lệnh rao bán của người khác trên chợ riêng + giá ghi trên web dự án / web chợ.
+    h.ref = await Promise.race([refPrices(provider, h.contract, { markets: h.markets ?? [], page, wallet }).catch(() => null), new Promise((r) => setTimeout(() => r(null), 30_000))]);
     const newSales = !h.salesCached && h.sales?.count;
     const newMarkets = !h.marketsCached && h.markets?.length;
     if (newSales || newMarkets) sellCache[h.contract.toLowerCase()] = { at: Date.now(), sales: newSales ? h.sales : prev?.sales, markets: newMarkets ? h.markets : prev?.markets };
@@ -296,6 +301,8 @@ export async function sellReport(provider, cfg, wallet, contracts, { bnbUsdt, lo
       if (offer) options.push({ venue: 'Element (lệnh mua, bán ngay được)', priceBNB: offer.price, instant: true, url: `https://element.market/assets/bsc/${h.contract}/${id}` });
       if (h.sales.maxBNB) options.push({ venue: `Giá bán cao nhất gần đây (${h.sales.count} giao dịch)`, priceBNB: h.sales.maxBNB, instant: false });
       if (h.sales.medianBNB) options.push({ venue: 'Giá bán trung vị gần đây', priceBNB: h.sales.medianBNB, instant: false });
+      const ask = h.ref?.asks?.[0];
+      if (ask) options.push({ venue: `Giá rao rẻ nhất trên chợ ${hostOf(ask.site) ?? ask.market.slice(0, 8) + '…'} (${ask.count} NFT đang rao)`, priceBNB: ask.floorBNB, instant: false, url: ask.site ?? undefined });
       options.sort((a, b) => b.priceBNB - a.priceBNB);
       return { tokenId: id, best: options[0] ?? null, options, elementUrl: id != null ? `https://element.market/assets/bsc/${h.contract}/${id}` : null };
     });

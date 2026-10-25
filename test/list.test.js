@@ -121,6 +121,7 @@ test('suggestPrice: lấy cao nhất trong trung vị / giá mint + lời / giá
   assert.equal(suggestPrice({ medianBNB: null, costBNB: null }, a), null);
   assert.equal(suggestPrice({ medianBNB: 0.01 }, { markupPct: 0, minPriceBNB: 0.03 }), 0.03);
   assert.equal(suggestPrice({ costBNB: 0 }, { markupPct: 30, minPriceBNB: 0.03 }), null); // mint miễn phí, chưa ai bán: không đoán giá
+  assert.equal(suggestPrice({ medianBNB: 0.002, floorBNB: 0.004 }, { markupPct: 0, minPriceBNB: 0 }), 0.004); // không rao rẻ hơn giá sàn của chợ riêng
   assert.equal(mintCostBNB(NFT, [{ target: NFT, qty: '2', valueWei: parseEther('0.02').toString() }]), 0.01);
 });
 
@@ -382,4 +383,51 @@ test('onchainListings: đọc lệnh rao bán của ví từ sự kiện chợ (
   const m = await onchainListings(p, MK, MAKER);
   assert.equal(m.get('3523').priceBNB, 0.004);
   assert.equal(m.get('3523').expiresAt, '2026-11-24T08:50:42.000Z');
+});
+
+test('marketAsks: giá rao rẻ nhất trên chợ riêng, bỏ lệnh đã gỡ / hết hạn / người rao đã bán / chợ chưa có quyền', async () => {
+  const { marketAsks } = await import('../src/refprice.js');
+  const { zeroPadValue, parseEther: pe, Interface: I } = await import('ethers');
+  const MK = '0xC6cBc2C06ae66d201A761FAa8Ac48aD92B835704';
+  const COLL = '0xC4605C6A7765138784B3ca6F9a88e1c249a0d21f';
+  const A = '0x1111111111111111111111111111111111111111', B = '0x2222222222222222222222222222222222222222', C = '0x3333333333333333333333333333333333333333';
+  const W = (v) => BigInt(v).toString(16).padStart(64, '0');
+  const T = '0x5b886b3c15d339ca3333d6712726a9665b4ded99f69cce925f48e03f1e891dcd';
+  const ev = (blk, id, who, price, exp = 1795510242) => ({ address: MK, blockNumber: blk, transactionHash: '0x' + blk, topics: [T, zeroPadValue('0x' + id.toString(16).padStart(2, '0'), 32), zeroPadValue(who, 32)], data: price == null ? '0x' : '0x' + W(pe(price)) + W(exp) });
+  const logs = [
+    ev(900, 1, A, '0.003'),           // hợp lệ, rẻ nhất
+    ev(901, 2, B, '0.001'),           // B đã bán NFT #2 cho người khác: bỏ
+    ev(902, 3, C, '0.002'), ev(903, 3, C, null), // đã gỡ lệnh
+    ev(904, 4, A, '0.0005', 1700000000), // hết hạn
+    ev(905, 5, B, '0.0045'),          // chợ chưa có quyền NFT #5: bỏ
+    ev(906, 6, C, '0.006'),           // hợp lệ (quyền cả bộ)
+  ];
+  const nft = new I(['function ownerOf(uint256) view returns (address)', 'function getApproved(uint256) view returns (address)', 'function isApprovedForAll(address,address) view returns (bool)']);
+  const owner = { 1: A, 2: C, 5: B, 6: C };
+  const p = {
+    getBlockNumber: async () => 1000,
+    getCode: async () => '0x6080' + COLL.slice(2).toLowerCase(),
+    getLogs: async () => logs,
+    call: async ({ to, data }) => {
+      if (to.toLowerCase() !== COLL.toLowerCase()) throw new Error('no multicall');
+      const d = nft.parseTransaction({ data });
+      if (d.name === 'ownerOf') return nft.encodeFunctionResult('ownerOf', [owner[Number(d.args[0])] ?? A]);
+      if (d.name === 'getApproved') return nft.encodeFunctionResult('getApproved', [Number(d.args[0]) === 1 ? MK : ZeroAddress]);
+      return nft.encodeFunctionResult('isApprovedForAll', [d.args[0].toLowerCase() === C.toLowerCase()]);
+    },
+  };
+  const r = await marketAsks(p, MK, COLL, { now: Date.parse('2026-10-25T00:00:00Z') });
+  assert.equal(r.count, 2);
+  assert.equal(r.floorBNB, 0.003);
+  assert.deepEqual(r.asks.map((x) => x.tokenId), ['1', '6']);
+  const mine = await marketAsks(p, MK, COLL, { now: Date.parse('2026-10-25T00:00:00Z'), exclude: A });
+  assert.equal(mine.floorBNB, 0.006); // không tính lệnh của chính ví bạn
+});
+
+test('webPrices: đọc giá có nhãn trên web dự án (Floor / Price / Giá / JSON nhúng), bỏ số không có nhãn', async () => {
+  const { webPrices } = await import('../src/refprice.js');
+  const html = '<div>Floor Price <span>0.0042 BNB</span></div><p>Giá: 0,01 BNB</p><p>Supply 5000 · 3 BNB pool</p><script>x</script>'
+    + '<script id="__NEXT_DATA__">{"floorPrice":"5000000000000000"}</script>';
+  const r = webPrices(html);
+  assert.deepEqual(r.map((x) => [x.kind, x.priceBNB]), [['floor', 0.0042], ['price', 0.01], ['floor', 0.005]]);
 });

@@ -625,7 +625,7 @@ $('sellBtn').onclick = async () => {
   $('sell').innerHTML = (rows.length
     ? `<table><tr><th>NFT</th><th>Giá cao nhất tìm thấy</th><th>Đăng bán</th><th></th></tr>${rows.map(({ h, it }) => `<tr>
         <td>${esc(h.name || 'NFT')} ${it.tokenId != null ? '#' + esc(String(it.tokenId).length > 12 ? String(it.tokenId).slice(0, 6) + '…' + String(it.tokenId).slice(-4) : it.tokenId) : `(x${esc(h.balance)})`}<div class="addr">${esc(short(h.contract))}</div></td>
-        <td>${fmt(it.best, h)}</td>
+        <td>${fmt(it.best, h)}${refBox(h)}</td>
         <td>${listCell(r, h, it)}</td>
         <td>${marketLinks(h, it)}${h.site ? `<a href="${esc(h.site)}" target="_blank" rel="noopener"><b>Bán trên web dự án</b></a><br>` : ''}${it.elementUrl ? `<a href="${esc(it.elementUrl)}" target="_blank" rel="noopener">Xem trên Element</a><br>` : ''}<a href="https://bscscan.com/token/${esc(h.contract)}?a=${esc(r.wallet)}" target="_blank" rel="noopener">BscScan</a></td>
       </tr>`).join('')}</table>`
@@ -636,6 +636,16 @@ $('sellBtn').onclick = async () => {
 };
 
 let lastSell = null;
+// Giá tham khảo bot tự tìm: lệnh rao bán của người khác trên chợ riêng + giá ghi trên web dự án / web chợ.
+function refBox(h) {
+  const ref = h.ref;
+  if (!ref || (!ref.asks?.length && !ref.web?.length)) return '';
+  const host = (u) => { try { return new URL(u).hostname; } catch { return null; } };
+  const KIND = { floor: 'Giá sàn', mint: 'Giá mint', price: 'Giá' };
+  const asks = (ref.asks || []).map((a) => `<div>🏷 Rẻ nhất trên chợ ${a.site ? `<a href="${esc(a.site)}" target="_blank" rel="noopener">${esc(host(a.site))}</a>` : `<a href="https://bscscan.com/address/${esc(a.market)}" target="_blank" rel="noopener">${esc(short(a.market))}</a>`}: <b>${esc(bnb(a.floorBNB, 5))} BNB</b> <span class="muted">${esc(usd(a.floorBNB))} · ${esc(a.count)} NFT đang rao${a.asks?.length > 1 ? ` · tiếp: ${a.asks.slice(1, 4).map((x) => esc(bnb(x.priceBNB, 5))).join(', ')}` : ''}</span></div>`).join('');
+  const web = (ref.web || []).map((w) => `<div>🌐 <a href="${esc(w.site)}" target="_blank" rel="noopener">${esc(host(w.site))}</a> ghi: ${w.prices.map((p) => `<span title="${esc(p.snippet)}">${esc(KIND[p.kind] || 'Giá')} <b>${esc(bnb(p.priceBNB, 5))} BNB</b></span>`).join(' · ')}</div>`).join('');
+  return `<div class="muted" style="margin-top:6px;font-size:12px"><b>Tham khảo:</b>${asks}${web}${web ? '<div>Giá trên web có thể cũ, kiểm tra lại trước khi đặt.</div>' : ''}</div>`;
+}
 // Chợ riêng của bộ NFT, bot tự tìm từ các giao dịch mua bán gần đây trên chain.
 function marketLinks(h, it) {
   return (h.markets || []).filter((m) => m.name !== 'Element').map((m) => {

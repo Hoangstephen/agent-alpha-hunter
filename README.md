@@ -135,3 +135,4 @@ x : [@HoangFUDSCAM](https://x.com/HoangFUDSCAM)
 - Bot tìm chợ của bộ NFT từ giao dịch gần đây, chỉ cấp quyền khi chợ kiểm chứng được (cùng chủ với hợp đồng NFT / web dự án ghi địa chỉ chợ / ≥ 5 người mua thật).
 - Luôn dùng `approve(chợ, tokenId)` cho **đúng 1 NFT**, không `setApprovalForAll` (chợ BN World chỉ hiện và bán được NFT có quyền này).
 - Lệnh rao bán đọc thẳng từ sự kiện của chợ trên chain; thiếu quyền thì có nút "Cấp quyền cho NFT này".
+- **Giá tham khảo** (chỉ đọc, không ký gì): giá rao rẻ nhất của người khác trên chợ riêng (bỏ lệnh hết hạn, đã gỡ, người rao đã bán hoặc chợ chưa có quyền) và giá ghi trên web dự án / web chợ (Floor, Price, Giá…). Giá gợi ý và tự bán không đặt thấp hơn giá rao rẻ nhất đó.

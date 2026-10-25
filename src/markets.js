@@ -260,16 +260,22 @@ export async function marketApproved(provider, nft, owner, market, tokenId, { pe
 export async function onchainListings(provider, market, seller, { blocks = 200_000, chunk = 5000, deadlineMs = 25_000 } = {}) {
   const head = await provider.getBlockNumber();
   const logs = await getLogsChunked(provider, { address: market, topics: [null, null, '0x' + pad(seller)] }, Math.max(0, head - blocks), head, chunk, { deadlineMs });
+  return listingEvents(logs, market);
+}
+
+// Đọc sự kiện rao bán: topic1 = số token, topic2 = ví người bán, data = [giá wei, hạn (giây)].
+// Sự kiện sau cùng của 1 token không kèm giá (vd. Cancelled/TakenDown(tokenId, seller)) = đã gỡ lệnh.
+export function listingEvents(logs, market) {
   const out = new Map();
   for (const l of [...logs].sort((a, b) => a.blockNumber - b.blockNumber || (a.index ?? 0) - (b.index ?? 0))) {
     const words = (l.data ?? '0x').slice(2).match(/.{64}/g) ?? [];
     if (l.topics.length !== 3) continue;
-    // Sự kiện sau cùng không kèm giá (vd. Cancelled/TakenDown(tokenId, seller)) = đã gỡ lệnh.
-    if (words.length < 1) { out.delete(BigInt(l.topics[1]).toString()); continue; }
+    const tokenId = BigInt(l.topics[1]).toString();
+    if (words.length < 1) { out.delete(tokenId); continue; }
     const priceWei = BigInt('0x' + words[0]);
     const expires = words[1] ? Number(BigInt('0x' + words[1])) : 0;
     if (priceWei < 10n ** 12n || priceWei > 10n ** 24n) continue;
-    out.set(BigInt(l.topics[1]).toString(), { priceBNB: Number(priceWei) / 1e18, expiresAt: expires > 1e9 && expires < 1e11 ? new Date(expires * 1000).toISOString() : null, txHash: l.transactionHash, market, block: l.blockNumber });
+    out.set(tokenId, { priceBNB: Number(priceWei) / 1e18, seller: topicToAddress(l.topics[2]), expiresAt: expires > 1e9 && expires < 1e11 ? new Date(expires * 1000).toISOString() : null, txHash: l.transactionHash, market, block: l.blockNumber });
   }
   return out;
 }

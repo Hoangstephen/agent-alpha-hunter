@@ -97,6 +97,7 @@
 <h2>Bán trên chợ riêng của dự án (không cần Element)</h2>
 <ul>
   <li>Bấm <b>Tìm giá bán cao nhất</b>. Bot tự tìm chợ mà bộ NFT đang được mua bán (ví dụ chợ Onchain Agents của BN World). Chợ có dấu <b>✓ chợ của dự án</b> là chợ bot đã kiểm chứng được: cùng chủ với hợp đồng NFT, hoặc web dự án ghi địa chỉ chợ, hoặc có từ 5 người mua thật trở lên.</li>
+  <li><b>Giá tham khảo</b> (dưới cột giá): bot tự đọc giá rao rẻ nhất của người khác trên chợ riêng, chỉ tính lệnh còn hạn mà người rao vẫn giữ NFT, và giá ghi trên web dự án / web chợ (Floor, Price, Giá…). Giá gợi ý không thấp hơn giá rao rẻ nhất. Giá trên web có thể cũ, hãy kiểm tra lại.</li>
   <li><b>Đặt giá bán</b>: lần đầu với mỗi NFT, bot xin quyền <code>approve(chợ, số token)</code> cho <b>đúng NFT đó</b>, không cấp quyền cả bộ. Quyền tự mất khi NFT được bán. Sau đó bot gọi lệnh rao bán của chợ. Mỗi bước đều có mô phỏng và bạn bấm xác nhận.</li>
   <li>NFT đã rao hiện "Đã đặt giá … BNB trên chợ … tới ngày …", đọc thẳng từ chain. Nếu có ⚠ "chưa có quyền cho riêng NFT này", bấm <b>Cấp quyền cho NFT này</b>: lệnh bán cũ dùng được ngay, không cần đặt giá lại.</li>
   <li><b>Bán ngay vào lệnh mua</b> chỉ chạy khi chợ đang có người trả giá (offer). Chợ chưa kiểm chứng được thì bot chỉ hiện link để bạn tự bán trên web chợ.</li>

@@ -1,6 +1,6 @@
 // Tự đăng bán: NFT mới về ví được bot đăng bán trên Element theo giá bạn đặt sẵn quy tắc.
 // TẮT mặc định. Bật trên giao diện (mục Bán NFT) hoặc file data/autosell.json.
-// Giá đăng = cao nhất trong: giá bán trung vị gần đây, giá mint x (1 + % lời), giá sàn bạn đặt.
+// Giá đăng = cao nhất trong: giá bán trung vị gần đây, giá rao rẻ nhất trên chợ riêng, giá mint x (1 + % lời), giá sàn bạn đặt.
 // Không có dữ liệu giá nào thì bỏ qua NFT đó (không bao giờ đoán giá).
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { formatEther } from 'ethers';
@@ -45,9 +45,10 @@ export function mintCostBNB(contract, rows = new Ledger().rows) {
 }
 
 const up4 = (x) => Math.ceil(x * 10_000) / 10_000;
-export function suggestPrice({ medianBNB, costBNB }, a) {
+export function suggestPrice({ medianBNB, costBNB, floorBNB }, a) {
   const c = [];
   if (medianBNB > 0) c.push(medianBNB);
+  if (floorBNB > 0) c.push(floorBNB); // giá rao rẻ nhất của người khác trên chợ riêng: không đăng rẻ hơn
   if (costBNB > 0) c.push(costBNB * (1 + a.markupPct / 100));
   if (!c.length) return null; // không có dữ liệu giá: không đăng
   if (a.minPriceBNB > 0) c.push(a.minPriceBNB);
@@ -87,7 +88,7 @@ export async function autoSellRun(provider, cfg, report, { log = console.log, a 
       if (it.tokenId == null) continue;
       const key = `${h.contract.toLowerCase()}:${it.tokenId}`;
       if (isListed(listed, key)) continue;
-      const priceBNB = suggestPrice({ medianBNB: h.sales?.medianBNB, costBNB }, a);
+      const priceBNB = suggestPrice({ medianBNB: h.sales?.medianBNB, costBNB, floorBNB: h.ref?.floorBNB }, a);
       if (!priceBNB) { log(`[tự bán] bỏ qua ${h.name ?? h.contract} #${it.tokenId}: chưa có giá tham khảo`); continue; }
       try {
         const r = await listFn(provider, cfg, { maker: report.wallet, contract: h.contract, tokenId: it.tokenId, priceBNB, days: a.days, minPriceBNB: a.minPriceBNB, log });
