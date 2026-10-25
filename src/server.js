@@ -222,7 +222,7 @@ const api = {
     const pv = await previewMarketCall(cfg, w.address, m.address, call.data, { provider: state.provider, what: mode === 'list' ? 'lệnh đặt giá' : 'lệnh bán', log });
     if (!pv.ok) return pv;
     if (pv.extraPerms) return { ok: false, error: 'Giao dịch này kèm cấp thêm quyền cho bên khác: đã chặn.', risks: pv.risks };
-    state.pending.set(id, { kind: mode === 'list' ? 'mk-list' : 'mk-sell', requestId: pv.requestId, contract, tokenId: String(tokenId), market: m.address, at: Date.now() });
+    state.pending.set(id, { kind: mode === 'list' ? 'mk-list' : 'mk-sell', requestId: pv.requestId, contract, tokenId: String(tokenId), market: m.address, site: m.site ?? null, priceBNB: mode === 'list' ? Number(priceBNB) : null, at: Date.now() });
     return { ok: true, step: mode === 'list' ? 'list' : 'sell', id, ...base, priceBNB: mode === 'list' ? Number(priceBNB) : null, changes: pv.changes, risks: pv.risks, sample: call.sample, guessed: call.guessed ?? null, needsAppApproval: pv.requireConfirmation };
   },
   // Sau khi bán: thu hồi quyền cả bộ đã cấp cho chợ (giống "revoke mọi approval" sau khi bán).
@@ -248,9 +248,17 @@ const api = {
     const done = await waitReceipt(state.provider, r.txHash, { timeoutMs: 60_000 });
     if (p.kind === 'mk-approve') return done ? { ok: true, next: 'sell' } : { ok: false, error: 'Cấp quyền chưa được xác nhận trên chain, thử lại sau ít phút.' };
     if (p.kind === 'mk-revoke') return { ok: true, txHash: r.txHash, confirmed: done, kind: p.kind };
+    let noMarketLog = false;
+    if (p.kind === 'mk-list' && done) {
+      // Chợ ghi lệnh rao bán thành sự kiện (log) của chính hợp đồng chợ. Không có log = giao dịch chạy nhưng có thể chợ không nhận lệnh.
+      const rc = await state.provider.getTransactionReceipt(r.txHash).catch(() => null);
+      noMarketLog = Boolean(rc) && !rc.logs.some((l) => l.address.toLowerCase() === p.market.toLowerCase());
+      if (noMarketLog) log(`[bán] ⚠ đặt giá ${p.contract} #${p.tokenId}: giao dịch thành công nhưng chợ ${p.market} không ghi sự kiện nào`);
+      else markListed(`${p.contract.toLowerCase()}:${p.tokenId}`, { priceBNB: p.priceBNB, market: p.market, site: p.site, txHash: r.txHash, expiresAt: new Date(Date.now() + 30 * 86400_000).toISOString() });
+    }
     // Bán xong mà chợ vẫn giữ quyền cả bộ: gợi ý thu hồi (đặt giá bán thì phải giữ quyền tới khi có người mua).
     const canRevoke = p.kind === 'mk-sell' && done && (await marketApproved(state.provider, p.contract, walletInfo().address, p.market));
-    return { ok: true, txHash: r.txHash, confirmed: done, kind: p.kind, canRevoke, contract: p.contract, market: p.market };
+    return { ok: true, txHash: r.txHash, confirmed: done, kind: p.kind, canRevoke, noMarketLog, site: p.site, contract: p.contract, market: p.market };
   },
   // LP của token có bị khoá/đốt không (pool PancakeSwap V2).
   'POST /api/lp': async ({ token, quote }) => {

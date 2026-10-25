@@ -540,6 +540,8 @@ $('confirmBtn').onclick = async () => {
     $('dlgBody').innerHTML = !r.ok ? `<h3 class="bad">Lỗi</h3><p>${esc(r.error)}</p>`
       : r.next === 'retry' ? `<h3 class="warn">${esc(r.message)}</h3>`
       : `<h3 class="${r.confirmed ? 'ok' : r.confirmed === false ? 'bad' : 'warn'}">${r.confirmed ? (r.kind === 'mk-list' ? 'Đã đặt giá bán ✓' : r.kind === 'mk-revoke' ? 'Đã thu hồi quyền ✓' : 'Đã bán ✓') : r.confirmed === false ? 'Giao dịch thất bại' : 'Đã gửi, đang chờ xác nhận…'}</h3><a href="https://bscscan.com/tx/${esc(r.txHash)}" target="_blank" rel="noopener">Xem trên BscScan</a>`
+        + (r.kind === 'mk-list' && r.confirmed && !r.noMarketLog ? `<p class="muted">Web của chợ có thể cần vài phút mới hiện. Tìm theo số token, hoặc mở giao dịch trên BscScan để xem sự kiện rao bán.</p>${r.site ? `<a href="${esc(r.site)}" target="_blank" rel="noopener">Mở web của chợ</a>` : ''}` : '')
+        + (r.noMarketLog ? '<p class="bad">⚠ Giao dịch chạy thành công nhưng chợ không ghi lệnh rao bán nào: có thể chợ không nhận lệnh này. Bạn gửi link BscScan ở trên cho người hỗ trợ để kiểm tra, và đặt giá trên web của chợ.</p>' : '')
         + (r.canRevoke ? `<p>Chợ vẫn còn quyền chuyển các NFT khác cùng bộ trong ví bạn. Không bán thêm thì nên thu hồi:</p><button class="primary" data-mrevoke="${esc(r.market)}" data-mnft="${esc(r.contract)}">Thu hồi quyền của chợ</button>` : '');
     setTimeout(refreshBalance, 8000);
     return;
@@ -637,6 +639,7 @@ function listCell(r, h, it) {
   if (it.tokenId == null) return r.canList
     ? `<span class="muted">Bot chưa tìm ra số token, xem trên BscScan rồi nhập:</span><br><input placeholder="Số token" style="width:90px" data-ltid> <input type="text" inputmode="decimal" style="width:80px" placeholder="Giá" data-lprice> BNB <button class="primary" data-list="${esc(h.contract)}" data-lname="${esc(h.name || 'NFT')}">Đăng bán</button>`
     : '<span class="muted">Chưa biết số token</span>';
+  if (it.listed?.market) return `<span class="ok">Đã đặt giá ${esc(bnb(it.listed.priceBNB))} BNB trên chợ ${esc(short(it.listed.market))}</span><br><span class="muted">lúc ${esc(new Date(it.listed.at).toLocaleString())} ·</span> <a href="https://bscscan.com/tx/${esc(it.listed.txHash)}" target="_blank" rel="noopener">giao dịch</a>`;
   if (it.listed) return `<span class="ok">Đang bán ${esc(bnb(it.listed.priceBNB))} BNB</span><br><span class="muted">tới ${esc(new Date(it.listed.expiresAt).toLocaleDateString())}</span>`;
   if (!r.canList) return r.elementEnabled ? '<span class="muted">Đăng nhập ví Agentic để đăng bán</span>'
     : '<span class="warn">Element bắt buộc có API key mới cho đăng bán.</span><br><span class="muted">Dán key ở khung phía trên, hoặc</span> <a href="https://forms.gle/78wpggURGADCjshr7" target="_blank" rel="noopener">đăng ký key</a>';
