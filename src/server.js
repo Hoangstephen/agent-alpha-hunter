@@ -202,7 +202,7 @@ const api = {
     if (!(await marketApproved(state.provider, contract, w.address, m.address, tokenId))) {
       // Cùng chủ với dự án: quyền cả bộ (bán nhiều NFT không phải cấp lại). Cách tin khác: chỉ quyền cho đúng NFT này.
       const scope = m.trust.scope === 'all' ? 'all' : 'token';
-      const pv = previewMarketCall(cfg, w.address, contract, scope === 'all' ? approveMarketData(m.address) : approveTokenData(m.address, tokenId));
+      const pv = await previewMarketCall(cfg, w.address, contract, scope === 'all' ? approveMarketData(m.address) : approveTokenData(m.address, tokenId), { provider: state.provider, what: 'bước cấp quyền', log });
       if (!pv.ok) return pv;
       state.pending.set(id, { kind: 'mk-approve', requestId: pv.requestId, contract, tokenId: String(tokenId), market: m.address, at: Date.now() });
       return { ok: true, step: 'approve', scope, id, ...base, risks: pv.risks, needsAppApproval: pv.requireConfirmation };
@@ -211,18 +211,19 @@ const api = {
     let call;
     if (mode === 'list') {
       if (!/^\d{1,6}(\.\d{1,18})?$/.test(String(priceBNB)) || Number(priceBNB) <= 0) return { ok: false, error: 'Nhập giá bán (BNB)' };
-      if (!learnedM.listSamples.length) return { ok: false, error: 'Bot chưa thấy ai đặt giá bán trên chợ này gần đây nên chưa học được cách đặt. Đặt giá trên web của chợ, hoặc thử lại sau.', site: m.site };
-      call = await findListCall(state.provider, m.address, learnedM.listSamples, { me: w.address, tokenId, priceWei: parseEther(String(priceBNB)) });
-      if (!call) return { ok: false, error: 'Chợ từ chối lệnh đặt giá khi mô phỏng (có thể NFT đang được rao bán rồi, hoặc chợ đã đổi cách đặt). Thử trên web của chợ.', site: m.site };
+      call = await findListCall(state.provider, m.address, learnedM.listSamples, { me: w.address, tokenId, priceWei: parseEther(String(priceBNB)), nft: contract, single: learnedM.single });
+      if (!call) return { ok: false, error: learnedM.listSamples.length
+        ? 'Chợ từ chối lệnh đặt giá khi mô phỏng (có thể NFT đang được rao bán rồi, hoặc chợ đã đổi cách đặt). Thử trên web của chợ.'
+        : 'Bot chưa đọc được giao dịch đặt giá nào trên chợ này, và các cách đặt giá phổ biến đều bị chợ từ chối khi mô phỏng. Đặt giá trên web của chợ.', site: m.site };
     } else {
       call = await findInstantSell(state.provider, { ...m, sellSamples: [...learnedM.sellSamples, ...(m.sellSamples ?? [])] }, { me: w.address, tokenId });
       if (!call) return { ok: false, error: 'Chưa có lệnh mua (offer) nào trên chợ nhận được NFT này lúc này: lệnh mua có thể chỉ dành cho số token khác hoặc đã có người bán vào. Dùng "Đặt giá bán" để rao bán thay.', site: m.site };
     }
-    const pv = previewMarketCall(cfg, w.address, m.address, call.data);
+    const pv = await previewMarketCall(cfg, w.address, m.address, call.data, { provider: state.provider, what: mode === 'list' ? 'lệnh đặt giá' : 'lệnh bán', log });
     if (!pv.ok) return pv;
     if (pv.extraPerms) return { ok: false, error: 'Giao dịch này kèm cấp thêm quyền cho bên khác: đã chặn.', risks: pv.risks };
     state.pending.set(id, { kind: mode === 'list' ? 'mk-list' : 'mk-sell', requestId: pv.requestId, contract, tokenId: String(tokenId), market: m.address, at: Date.now() });
-    return { ok: true, step: mode === 'list' ? 'list' : 'sell', id, ...base, priceBNB: mode === 'list' ? Number(priceBNB) : null, changes: pv.changes, risks: pv.risks, sample: call.sample, needsAppApproval: pv.requireConfirmation };
+    return { ok: true, step: mode === 'list' ? 'list' : 'sell', id, ...base, priceBNB: mode === 'list' ? Number(priceBNB) : null, changes: pv.changes, risks: pv.risks, sample: call.sample, guessed: call.guessed ?? null, needsAppApproval: pv.requireConfirmation };
   },
   // Sau khi bán: thu hồi quyền cả bộ đã cấp cho chợ (giống "revoke mọi approval" sau khi bán).
   'POST /api/market/revoke': async ({ contract, market }) => {
@@ -230,7 +231,7 @@ const api = {
     if (!w.connected) return { ok: false, error: w.hint };
     if (!isAddress(contract) || !isAddress(market)) return { ok: false, error: 'Dữ liệu không hợp lệ' };
     if (!(await marketApproved(state.provider, contract, w.address, market))) return { ok: true, nothing: true };
-    const pv = previewMarketCall(cfg, w.address, contract, revokeMarketData(market));
+    const pv = await previewMarketCall(cfg, w.address, contract, revokeMarketData(market), { provider: state.provider, what: 'lệnh thu hồi quyền', log });
     if (!pv.ok) return pv;
     const id = randomUUID();
     state.pending.set(id, { kind: 'mk-revoke', requestId: pv.requestId, contract, market: getAddress(market), at: Date.now() });

@@ -336,3 +336,29 @@ test('siteMentions: web dự án ghi địa chỉ chợ (trong HTML hoặc file 
   assert.ok(!seen.some((u) => u.includes('evil.com')));
   assert.equal(await siteMentions('https://proj.xyz/', '<p>nothing</p>', MK, fetchFn), false);
 });
+
+test('Chợ chỉ bán 1 bộ NFT: học đặt giá không cần địa chỉ NFT; chưa có mẫu thì thử hàm list(uint256,uint256) có trong mã chợ', async () => {
+  const { learnMarket, guessListCall } = await import('../src/markets.js');
+  const { zeroPadValue, parseEther: pe, Interface: I } = await import('ethers');
+  const MK = '0x8888888888888888888888888888888888888889';
+  const COL = '0x9999999999999999999999999999999999999998';
+  const W = (v) => BigInt(v).toString(16).padStart(64, '0');
+  const LISTER = '0x00000000000000000000000000000000000000b1';
+  const listData = '0xaaaaaaaa' + W(44) + W(pe('0.001'));
+  const h = '0x' + '1'.padStart(64, '0');
+  const sel = new I(['function list(uint256,uint256)']).getFunction('list').selector.slice(2);
+  const provider = {
+    getBlockNumber: async () => 1000,
+    getLogs: async () => [{ address: MK, transactionHash: h, blockNumber: 999, topics: [], data: '0x' }],
+    getCode: async () => '0x6080' + COL.slice(2).toLowerCase() + '63' + sel,
+    call: async () => '0x',
+    getTransaction: async () => ({ from: LISTER, to: MK, value: 0n, data: listData }),
+    getTransactionReceipt: async () => ({ status: 1, logs: [{ address: MK, topics: ['0x' + 'e'.repeat(64), zeroPadValue(LISTER, 32)], data: '0x' + W(44) + W(pe('0.001')) }] }),
+  };
+  const v = await learnMarket(provider, MK, COL);
+  assert.equal(v.single, true);
+  assert.equal(v.listSamples.length, 1);
+  const g = await guessListCall(provider, MK, COL, { me: MAKER, tokenId: 5888, priceWei: pe('0.002'), single: true });
+  assert.equal(g.guessed, 'list(uint256,uint256)');
+  assert.equal(g.data, '0x' + sel + W(5888) + W(pe('0.002')));
+});

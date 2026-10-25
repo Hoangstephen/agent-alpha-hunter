@@ -100,8 +100,8 @@ export const signin = () => baw(['auth', 'signin']);
 export const verify = (qrCodeId) => bawAsync(['auth', 'verify', '--qrCodeId', qrCodeId]);
 export const signout = () => baw(['auth', 'signout']);
 
-export function previewCall({ chainId, from, to, valueWei, data }) {
-  return baw(['contract-call', 'preview', '--binanceChainId', String(chainId), '--from', from, '--to', to, '--value', valueWei.toString(), '--inputData', data]);
+export function previewCall({ chainId, from, to, valueWei, data, gasLimit }) {
+  return baw(['contract-call', 'preview', '--binanceChainId', String(chainId), '--from', from, '--to', to, '--value', valueWei.toString(), '--inputData', data, ...(gasLimit ? ['--gasLimit', String(gasLimit)] : [])]);
 }
 
 export function executeCall(requestId) {

@@ -681,7 +681,7 @@ async function startMarketSell(x) {
          ${r.step === 'list' ? '<p class="muted">NFT được rao bán trên chợ của dự án ở giá này. Có người mua là BNB về ví bạn (chợ trừ phí theo luật của chợ).</p>' : ''}
          <p>Binance mô phỏng giao dịch, số dư thay đổi:</p>
          ${(r.changes || []).length ? `<ul>${r.changes.map((c) => `<li><b>${esc(c.amount)} ${esc(c.symbol)}</b></li>`).join('')}</ul>` : r.step === 'list' ? '<p class="ok">Không có tiền/NFT rời ví lúc đặt giá (chỉ tốn gas).</p>' : '<p class="warn">Binance không trả về thay đổi số dư: kiểm tra kỹ trên web của chợ trước khi bán.</p>'}
-         ${risks}<p class="muted">Bot chép cách ${r.step === 'list' ? 'đặt giá' : 'bán'} từ giao dịch thật của người khác trên chợ này (<a href="https://bscscan.com/tx/${esc(r.sample)}" target="_blank" rel="noopener">mẫu</a>), thay bằng NFT${r.step === 'list' ? ', giá' : ''} và ví của bạn.</p>${app}`;
+         ${risks}${r.guessed ? `<p class="muted">Bot gọi hàm <code>${esc(r.guessed)}</code> có sẵn trong hợp đồng chợ, đã mô phỏng chạy được với NFT, giá và ví của bạn.</p>` : `<p class="muted">Bot chép cách ${r.step === 'list' ? 'đặt giá' : 'bán'} từ giao dịch thật của người khác trên chợ này (<a href="https://bscscan.com/tx/${esc(r.sample)}" target="_blank" rel="noopener">mẫu</a>), thay bằng NFT${r.step === 'list' ? ', giá' : ''} và ví của bạn.</p>`}${app}`;
   if (!$('dlg').open) $('dlg').showModal();
 }
 function trustText(t = {}) {

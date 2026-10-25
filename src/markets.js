@@ -140,15 +140,29 @@ export async function findInstantSell(provider, market, { me, tokenId }) {
 // - đặt giá bán: NFT không di chuyển, không kèm BNB, dữ liệu gọi hàm có đúng 1 số token của bộ NFT
 //   và đúng 1 số tiền (wei) cũng xuất hiện trong log của chợ (= giá vừa đặt)  → listSamples
 const learned = new Map();
-export async function learnMarket(provider, market, nft, { blocks = 120_000, chunk = 5000, deadlineMs = 25_000, maxTx = 60, maxSupply = 1_000_000n } = {}) {
+// Chợ chỉ bán 1 bộ NFT (vd. chợ Onchain Agents): lệnh đặt giá chỉ có số token + giá, không có địa chỉ bộ NFT.
+// Nhận ra khi địa chỉ bộ NFT nằm sẵn trong mã chợ (biến immutable) hoặc 1 hàm đọc của chợ trả về nó.
+const COLL_GETTERS = ['nft', 'collection', 'token', 'nftContract', 'nftAddress', 'agents', 'NFT', 'asset'];
+export async function singleCollection(provider, market, nft) {
+  const code = String(await provider.getCode(market).catch(() => '0x')).toLowerCase();
+  if (code.includes(nft.toLowerCase().slice(2))) return true;
+  for (const fn of COLL_GETTERS) {
+    const r = await tryCall(provider, market, new Interface([`function ${fn}() view returns (address)`]), fn).catch(() => null);
+    if (r && r.toLowerCase() === nft.toLowerCase()) return true;
+  }
+  return false;
+}
+
+export async function learnMarket(provider, market, nft, { blocks = 300_000, chunk = 5000, deadlineMs = 30_000, maxTx = 120, maxSupply = 1_000_000n } = {}) {
   const key = `${market}:${nft}`.toLowerCase();
   const hit = learned.get(key);
   if (hit && Date.now() - hit.at < 5 * 60_000) return hit.v;
+  const single = await singleCollection(provider, market, nft).catch(() => false);
   const head = await provider.getBlockNumber();
   const logs = await getLogsChunked(provider, { address: market }, Math.max(0, head - blocks), head, chunk, { concurrency: 6, deadlineMs });
   const hashes = [...new Map(logs.map((l) => [l.transactionHash, l.blockNumber])).entries()].sort((a, b) => b[1] - a[1]).slice(0, maxTx).map(([h]) => h);
   const nftW = pad(nft);
-  const v = { sellSamples: [], listSamples: [] };
+  const v = { sellSamples: [], listSamples: [], single };
   await mapLimit(hashes, 5, async (hash) => {
     const [tx, rc] = await Promise.all([provider.getTransaction(hash).catch(() => null), provider.getTransactionReceipt(hash).catch(() => null)]);
     if (!tx?.to || tx.to.toLowerCase() !== market.toLowerCase() || BigInt(tx.value ?? 0n) !== 0n || !rc || Number(rc.status) !== 1) return;
@@ -161,7 +175,7 @@ export async function learnMarket(provider, market, nft, { blocks = 120_000, chu
       v.sellSamples.push({ hash, seller: tx.from, tokenId: BigInt(nftMoves[0].topics[3]).toString(), data: tx.data });
       return;
     }
-    if (nftMoves.length || !words.includes(nftW)) return; // đặt giá: NFT chưa di chuyển, gọi hàm có địa chỉ bộ NFT
+    if (nftMoves.length || (!words.includes(nftW) && !single)) return; // đặt giá: NFT chưa di chuyển, gọi hàm có địa chỉ bộ NFT (hoặc chợ chỉ bán bộ này)
     const marketLogs = rc.logs.filter((l) => l.address.toLowerCase() === market.toLowerCase()).map((l) => (l.data + l.topics.join('')).toLowerCase());
     const inLogs = (w) => marketLogs.some((x) => x.includes(w));
     const ids = words.map((w, i) => ({ w, i, n: BigInt('0x' + w) })).filter((x) => x.w !== nftW && x.n < maxSupply && inLogs(x.w));
@@ -181,7 +195,28 @@ export function adaptList(s, { me, tokenId, priceWei }) {
   return s.data.slice(0, 10).toLowerCase() + words.join('').split(pad(s.seller)).join(pad(me));
 }
 
-export async function findListCall(provider, market, samples, { me, tokenId, priceWei }) {
+// Chưa có mẫu: thử các hàm đặt giá phổ biến, CHỈ hàm có thật trong mã chợ, và phải mô phỏng chạy được.
+const LIST_GUESSES = [
+  ['list(uint256,uint256)', 'single'], ['listItem(uint256,uint256)', 'single'], ['listAgent(uint256,uint256)', 'single'], ['createListing(uint256,uint256)', 'single'], ['listForSale(uint256,uint256)', 'single'], ['sell(uint256,uint256)', 'single'],
+  ['list(address,uint256,uint256)', 'nft'], ['listItem(address,uint256,uint256)', 'nft'], ['createListing(address,uint256,uint256)', 'nft'], ['listToken(address,uint256,uint256)', 'nft'],
+];
+export async function guessListCall(provider, market, nft, { me, tokenId, priceWei, single }) {
+  const code = String(await provider.getCode(market).catch(() => '0x')).toLowerCase();
+  for (const [sig, kind] of LIST_GUESSES) {
+    if (kind === 'single' && !single) continue;
+    const f = new Interface([`function ${sig}`]);
+    const fn = f.fragments[0];
+    if (!code.includes(fn.selector.slice(2))) continue;
+    const data = f.encodeFunctionData(fn, kind === 'single' ? [BigInt(tokenId), BigInt(priceWei)] : [getAddress(nft), BigInt(tokenId), BigInt(priceWei)]);
+    try {
+      await provider.call({ from: me, to: market, data, value: 0n });
+      return { data, sample: null, guessed: sig };
+    } catch {}
+  }
+  return null;
+}
+
+export async function findListCall(provider, market, samples, { me, tokenId, priceWei, nft, single } = {}) {
   for (const s of samples) {
     const data = adaptList(s, { me, tokenId, priceWei });
     try {
@@ -189,7 +224,7 @@ export async function findListCall(provider, market, samples, { me, tokenId, pri
       return { data, sample: s.hash };
     } catch {}
   }
-  return null;
+  return nft ? guessListCall(provider, market, nft, { me, tokenId, priceWei, single }) : null;
 }
 
 export const approveMarketData = (market) => nftI.encodeFunctionData('setApprovalForAll', [getAddress(market), true]);
@@ -206,9 +241,25 @@ export async function marketApproved(provider, nft, owner, market, tokenId) {
 // Thay đổi số dư Binance mô phỏng (tên trường có thể khác nhau giữa các bản).
 export const readChanges = (list = []) => list.map((b) => ({ symbol: b.symbol ?? b.tokenSymbol ?? b.token ?? b.asset ?? '?', amount: String(b.amount ?? b.change ?? b.value ?? b.delta ?? '?') }));
 
-export function previewMarketCall(cfg, me, to, data) {
-  const p = wallet.previewCall({ chainId: cfg.binanceChainId, from: me, to, valueWei: 0n, data });
-  if (!p.success) return { ok: false, error: `Binance từ chối: ${p.error?.message ?? JSON.stringify(p.error)}` };
+// Tự ước lượng gas trước (Binance báo "Invalid contract-call parameters" khi tự ước lượng không được):
+// lỗi ở đây thì báo đúng lý do chợ từ chối, chạy được thì gửi kèm gasLimit cho Binance.
+export async function previewMarketCall(cfg, me, to, data, { provider, what = 'giao dịch', log = () => {} } = {}) {
+  let gasLimit;
+  if (provider) {
+    try {
+      const est = BigInt(await provider.estimateGas({ from: me, to, data, value: 0n }));
+      gasLimit = Math.min(15_000_000, Math.max(21_000, Number(est * 13n / 10n))); // giới hạn baw: 21000–15000000
+    } catch (e) {
+      const why = (e.shortMessage || e.reason || e.message || '').slice(0, 160);
+      log(`[bán] mô phỏng ${what} lỗi: to=${to} hàm=${data.slice(0, 10)} · ${why}`);
+      return { ok: false, error: `Hợp đồng từ chối ${what} khi mô phỏng: ${why}` };
+    }
+  }
+  const p = wallet.previewCall({ chainId: cfg.binanceChainId, from: getAddress(me), to: getAddress(to), valueWei: 0n, data, gasLimit });
+  if (!p.success) {
+    log(`[bán] Binance từ chối ${what}: to=${to} hàm=${data.slice(0, 10)} gas=${gasLimit ?? '?'} · ${p.error?.message ?? JSON.stringify(p.error)}`);
+    return { ok: false, error: `Binance từ chối ${what}: ${p.error?.message ?? JSON.stringify(p.error)}` };
+  }
   const d = p.data;
   const sim = d.simulationResult ?? {};
   const risks = [
