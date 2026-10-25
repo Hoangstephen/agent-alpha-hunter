@@ -163,6 +163,10 @@
     <h2>Quyền token đã cấp (approve)</h2>
     <div class="muted">Các hợp đồng đang được phép tiêu token trong ví của bạn. Thu hồi (revoke) những quyền không dùng nữa, nhất là quyền "vô hạn" hoặc bị đánh dấu rủi ro.</div>
     <div class="bar"><button id="apprBtn">Xem quyền đã cấp</button></div>
+    <div class="bar" style="margin-top:6px"><span class="muted">Thu hồi quyền NFT (quyền chuyển cả bộ NFT cho 1 chợ):</span>
+      <input id="nftRevokeNft" placeholder="Địa chỉ hợp đồng NFT 0x…" style="min-width:220px">
+      <input id="nftRevokeSpender" placeholder="Địa chỉ chợ được cấp quyền 0x…" style="min-width:220px">
+      <button id="nftRevokeBtn">Thu hồi</button></div>
     <div id="appr"></div>
   </section>
 
@@ -422,6 +426,12 @@ async function loadApprovals() {
   }));
 }
 $('apprBtn').onclick = loadApprovals;
+$('nftRevokeBtn').onclick = () => {
+  const b = document.createElement('button');
+  b.dataset.mrevoke = $('nftRevokeSpender').value.trim();
+  b.dataset.mnft = $('nftRevokeNft').value.trim();
+  document.body.appendChild(b); b.click(); b.remove();
+};
 
 let pendingStep = null;
 let pendingMint = null;
